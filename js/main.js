@@ -371,26 +371,35 @@ var axis = 1;
 function onKeydown(e) {
     var step = 1;
 	  switch(e.keyCode){
-	  // case 87://w
-	  //     robot.object.translateX( step ) ;
-    //     robot.object.__dirtyPosition = true;
+    case 81: // q
+        robot.dropCart();
+        break;
+    case 82: // r
+        robot.lifter.raiseBed();
+        break;
+    case 70: // f
+        robot.lifter.lowerBed();
+        break;
+	  case 87: // w
+	      robot.object.translateX( step ) ;
+        robot.object.__dirtyPosition = true;
     //     // robot.wL.configureAngularMotor( axis, 1, 0, 5, 200 );
     //     // robot.wR.configureAngularMotor( axis, 1, 0, 5, 200 );
     //     // robot.wL.enableAngularMotor( axis );
     //     // robot.wR.enableAngularMotor( axis );
-	  //     break;
+	      break;
 	  // case 65://a
 	  //     robot.object.rotateOnAxis( zAxis, Math.PI/36 );
     //     robot.object.__dirtyRotation = true;
 	  //     break;
-	  // case 83://s
-	  //     robot.object.translateX( -step ) ;
-    //     robot.object.__dirtyPosition = true;
+	  case 83: // s
+	      robot.object.translateX( -step ) ;
+        robot.object.__dirtyPosition = true;
     //     // robot.wL.configureAngularMotor( axis, 1, 0, -5, 200 );
     //     // robot.wR.configureAngularMotor( axis, 1, 0, -5, 200 );
     //     // robot.wL.enableAngularMotor( axis );
     //     // robot.wR.enableAngularMotor( axis );
-	  //     break;
+	      break;
 	  // case 68://d
 	  //     robot.object.rotateOnAxis( zAxis, -Math.PI/36 );
     //     robot.object.__dirtyRotation = true;
