@@ -1,4 +1,4 @@
-function Robot() {
+function Robot(x0, y0, z0) {
     var gearGeom = new THREE.CylinderGeometry( 1.5, 1.5, 0.25, 32 );
     var wheelGeom = new THREE.CylinderGeometry( 3, 3, 0.5, 32 );
     var elbowGeom = new THREE.TorusGeometry(1.5, 0.5, 12, 12, Math.PI/2);
@@ -248,19 +248,107 @@ function Robot() {
     this.cart.translateX( 12 );
     this.cart.translateZ( -2 );
     this.cart.rotateOnAxis( zAxis, Math.PI/2 );
+    this.cartAttached = true;
+
     this.object.add( this.cart );
+    this.xPos = x0;
+    this.yPos = y0;
+    this.zRot = 0;
+
+    this.currentState = 0;
+    this.state = States[0];
 }
 
-var CircleArc = THREE.Curve.create(
-    function( radius, phi0, phi1 ) {
-        this.radius = (radius ? radius : 0.5);
-        this.phi0 = (phi0 ? phi0 : 0);
-        this.phi1 = (phi1 ? phi1 : Math.PI/2);
-    },
-    function( t ) {
-        var phi = (1-t)*this.phi0 + t*this.phi1;
-        return new THREE.Vector3( this.radius*Math.cos(phi),
-                                  this.radius*Math.sin(phi),
-                                  0 );
+Robot.prototype.dropCart = function() {
+    if (this.cartAttached) {
+        var s = this.cart.localToWorld( new THREE.Vector3(0,0,0) );
+        this.object.remove( this.cart );
+        this.cart.position = s;
+        this.cart.__dirtyPosition = true;
+        scene.add( this.cart );
+        this.cartAttached = false;
     }
-);
+}
+
+Robot.prototype.move = function(dx, dy, dphi) {
+    var curr = this.currentState;
+    var next = Transitions[curr][0];
+    console.log(curr);
+    console.log(next);
+    var xpos = { x: this.object.position.x };
+    var xdest = { x: xpos.x + 20 };
+    var xtween = new TWEEN.Tween( xpos )
+        .to( xdest, 1000 )
+        .easing(TWEEN.Easing.Circular.Out)
+        .onUpdate( function() {
+            robot.object.position.x = this.x;
+            robot.object.__dirtyPosition = true;
+        } )
+        .onComplete( function() {
+            robot.currentState = next;
+        } )
+        .start();
+    var ypos = { y: this.object.position.y };
+    var ydest = { y: ypos.y - 20 };
+    var ytween = new TWEEN.Tween( ypos )
+        .to( ydest, 1000 )
+        .easing(TWEEN.Easing.Circular.In)
+        .onUpdate( function() {
+            robot.object.position.y = this.y;
+            robot.object.__dirtyPosition = true;
+        } )
+        .onComplete( function() {
+            robot.currentState = next;
+        } )
+        .start();
+    var zrot = { z: this.object.rotation.z };
+    var zdest = { z: zrot.z - Math.PI/2 };
+    var ztween = new TWEEN.Tween( zrot )
+        .to( zdest, 1000 )
+        .onUpdate( function() {
+            robot.object.rotation.z = this.z;
+            robot.object.__dirtyRotation = true;
+        } )
+        .onComplete( function() {
+            robot.currentState = next;
+        } )
+        .start();
+}
+
+function BezierCurve(b0, b1, b2) {
+    this.cp = [ b0, b1, b2 ];
+}
+
+BezierCurve.prototype.evaluate = function(t) {
+    var b = [];
+    for (var p=0; p<3; ++p) {
+        b[p] = this.cp[p];
+    }
+    for (var m=2; m>=0; --m) {
+        for (var p=0; p<m; ++p) {
+            b[p] = (1-t)*b[p+1] + t*b[p];
+        }
+    }
+    return b[0];
+};
+
+var States = [
+    { // State 0 - Start box facing east
+        x: -135, y: -60.75, theta: 0
+    },
+    { // State 1 - Near spare parts bin facing south
+        x: -100, y: -95, theta: -Math.PI/2
+    },
+    { // State 2 - Start box facing west
+        x: -135, y: -60.75, theta: Math.PI
+    },
+];
+
+var Transitions = [
+    // From State 0 - To States 1
+    [ 1 ],
+    // From State 1 - To States 0 or 2
+    [ 0, 2 ],
+    // From State 2 - To States 0
+    [ 0 ],
+];

@@ -21,7 +21,7 @@ var chuteConstraint = [], supportConstraint = [];
 var magnetiteVein = [];
 var spodumeneTower;
 
-
+var nullVec = new THREE.Vector3( 0, 0, 0 );
 var xAxis = new THREE.Vector3( 1, 0, 0 );
 var yAxis = new THREE.Vector3( 0, 1, 0 );
 var zAxis = new THREE.Vector3( 0, 0, 1 );
@@ -31,12 +31,12 @@ var zAxis = new THREE.Vector3( 0, 0, 1 );
 //var woodMat = new THREE.MeshLambertMaterial( { map: woodTex } );
 var WOODMat = new THREE.MeshLambertMaterial( { color: 0x0066cc } );
 var woodMat = new THREE.MeshLambertMaterial( { color: 0xd2b48c } );
+var coalMat = new THREE.MeshLambertMaterial( { color: 0x222222 } );
 var clearMat = new THREE.MeshBasicMaterial( { visible: false } );
 var PVCMat = new THREE.MeshLambertMaterial( { color: 0xff8800,
                                               side: THREE.DoubleSide } );
 var pvcMat = new THREE.MeshLambertMaterial( { color: 0xffffff,
                                               side: THREE.DoubleSide } );
-var coalMat = new THREE.MeshLambertMaterial( { color: 0x222222 } );
 var floorMat  = new THREE.MeshLambertMaterial( { color: 0x444444 } );
 var grayMat   = new THREE.MeshLambertMaterial( { color: "gray" } );
 var whiteMat = new THREE.MeshLambertMaterial( { color: "white" } );
@@ -105,52 +105,11 @@ function init() {
     robot.object.translateZ( z );
     scene.add( robot.object );
 
-    if (false) {
-        robot.wheelL.translateX( x );
-        robot.wheelL.translateY( y );
-        robot.wheelL.translateZ( z );
-        scene.add( robot.wheelL );
-
-        robot.wheelR.translateX( x );
-        robot.wheelR.translateY( y );
-        robot.wheelR.translateZ( z );
-        scene.add( robot.wheelR );
-
-        // robot.wL = new Physijs.HingeConstraint(
-        //     robot.wheelL, robot.object, new THREE.Vector3( x, y+5.75, z ), yAxis
-        // );
-        robot.wL = new Physijs.DOFConstraint(
-            robot.wheelL, robot.object, new THREE.Vector3( x, y+5.75, z )
-        );
-        scene.addConstraint( robot.wL );
-        //robot.wL.setLimits( 1, 0 );
-        robot.wL.setLinearLowerLimit({ x: 0, y: 0, z: 0 });
-        robot.wL.setLinearUpperLimit({ x: 0, y: 0, z: 0 });
-        robot.wL.setAngularLowerLimit({ x: 0, y: 0, z: 0 });
-        robot.wL.setAngularUpperLimit({ x: 0, y: 0, z: 0 });
-        // robot.wL.setAngularLowerLimit({ x: 0, y: -Math.PI, z: 0 });
-        // robot.wL.setAngularUpperLimit({ x: 0, y: Math.PI, z: 0 });
-
-        // robot.wR = new Physijs.HingeConstraint(
-        //     robot.wheelL, robot.object, new THREE.Vector3( x, y-5.75, z ), yAxis
-        // );
-        robot.wR = new Physijs.DOFConstraint(
-            robot.wheelR, robot.object, new THREE.Vector3( x, y-5.75, z )
-        );
-        scene.addConstraint( robot.wR );
-        // robot.wR.setLimits( 1, 0 );
-        robot.wR.setLinearLowerLimit({ x: 0, y: 0, z: 0 });
-        robot.wR.setLinearUpperLimit({ x: 0, y: 0, z: 0 });
-        robot.wR.setAngularLowerLimit({ x: 0, y: 0, z: 0 });
-        robot.wR.setAngularUpperLimit({ x: 0, y: 0, z: 0 });
-        // robot.wR.setAngularLowerLimit({ x: 0, y: -Math.PI, z: 0 });
-        // robot.wR.setAngularUpperLimit({ x: 0, y: Math.PI, z: 0 });
-    }
-
     renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.shadowMapEnabled = true;
+    renderer.setClearColor( 0x000022 );
+    renderer.shadowMapEnabled = useShadows;
     div.appendChild( renderer.domElement );
 
     controls = new THREE.OrbitControls( camera, renderer.domElement );
@@ -304,19 +263,21 @@ function triggerCoalChute( section ) {
     coalChute[s].setLinearFactor(new THREE.Vector3(1,1,1));
     coalChute[s].setAngularFactor(new THREE.Vector3(1,1,1));
     for (var i=0; i<24; ++i) {
-        var piece = coalChute[s].userData.pieces.pop();
-        coalChute[s].remove(piece);
-        var pos = coalChute[s].localToWorld(piece.position);
-        piece.position.set(pos.x, pos.y, pos.z);
-        piece.matrixWorldNeedsUpdate = true;
-        piece.setLinearFactor(new THREE.Vector3(1,1,1));
-        piece.setAngularFactor(new THREE.Vector3(1,1,1));
-        piece.setLinearVelocity(new THREE.Vector3(0,0,0));
-        piece.setAngularVelocity(new THREE.Vector3(0,0,0));
-        piece.__dirtyRotation = true;
-        piece.__dirtyPosition = true;
-        coalPieces[s].push(piece);
-        scene.add(piece);
+        if (true) {
+            var piece = coalChute[s].userData.pieces.pop();
+            coalChute[s].remove(piece);
+            var pos = piece.localToWorld(new THREE.Vector3(0,0,0));
+            piece.position.set(pos.x, pos.y, pos.z);
+            piece.matrixWorldNeedsUpdate = true;
+            piece.setLinearFactor(new THREE.Vector3(1,1,1));
+            piece.setAngularFactor(new THREE.Vector3(1,1,1));
+            piece.setLinearVelocity(nullVec);
+            piece.setAngularVelocity(nullVec);
+            piece.__dirtyRotation = true;
+            piece.__dirtyPosition = true;
+            coalPieces[s].push(piece);
+            scene.add(piece);
+        }
     }
 }
 
@@ -371,6 +332,9 @@ var axis = 1;
 function onKeydown(e) {
     var step = 1;
 	  switch(e.keyCode){
+	  case 87://w
+        robot.move( 10, 0, 0 );
+        break;
 	  // case 87://w
 	  //     robot.object.translateX( step ) ;
     //     robot.object.__dirtyPosition = true;
@@ -395,6 +359,9 @@ function onKeydown(e) {
 	  //     robot.object.rotateOnAxis( zAxis, -Math.PI/36 );
     //     robot.object.__dirtyRotation = true;
 	  //     break;
+    case 81: // q
+        robot.dropCart();
+        break;
 	  case 67://c
 	      triggerCoalChute( activeSection );
 	      break;

@@ -1,34 +1,40 @@
-function addCoalPieces(section) {
-    coalPieces[section] = [];
-    var phi = section*Math.PI/2;
-    for (var j=0; j<8; ++j) {
-        for (var k=0; k<3; ++k) {
-            var mesh = makeConvexMesh( makeCoalGeometry(), coalMat, 1 );
-            if (true) {
-                // Positioning relative to chute tray
-                mesh.castShadow = useShadows;
-                mesh.translateX( -2 + k*2 );
-                mesh.translateY( -3.5*4 + j*4 );
-                mesh.translateZ( 1.5 );
-                mesh.setLinearFactor(new THREE.Vector3(0,0,0));
-                mesh.setAngularFactor(new THREE.Vector3(0,0,0));
-                mesh.setLinearVelocity(new THREE.Vector3(0,0,0));
-                mesh.setAngularVelocity(new THREE.Vector3(0,0,0));
-                coalChute[section].add(mesh);
-            }
-            else {
-                // Positioning relative to game field
-                mesh.rotateOnAxis( zAxis, phi );
-                mesh.translateZ( 32.5 );
-                mesh.translateX( -72.75 + k*2 );
-                mesh.translateY( -107.5125 + j*4 );
-                scene.add(mesh);
-                coalPieces[section][j*3+k] = mesh;
-            }
-        }
+//--------------------------------------------------------------------
+// Constructor - Creates individual pieces
+//--------------------------------------------------------------------
+function Coal(enablePhysics, enableShadows) {
+    this.physics = ( enablePhysics === undefined ? usePhysics :
+                     enablePhysics && usePhysics );
+    this.shadows = ( enableShadows === undefined ? useShadows :
+                     enableShadows && useShadows );
+    if (this.physics) {
+        this.mesh = new Physijs.ConvexMesh( this.geometry,
+                                            this.substance,
+                                            this.mass );
     }
+    else {
+        this.mesh = new THREE.Mesh( this.geometry,
+                                    this.material );
+    }
+    this.mesh.castShadow = this.shadows;
+    // Coal is already black, so don't bother receiving shadows
+    //this.mesh.receiveShadow = this.shadows;
 }
-
+//--------------------------------------------------------------------
+// The prototype holds shared properties
+//--------------------------------------------------------------------
+Coal.prototype.mass = 10;
+Coal.prototype.friction = 0.8;
+Coal.prototype.restitution = 0.8;
+Coal.prototype.geometry = makeCoalGeometry();
+Coal.prototype.material = new THREE.MeshLambertMaterial(
+    { color: 0x222222 }
+);
+Coal.prototype.substance = Physijs.createMaterial(
+    Coal.prototype.material,
+    Coal.prototype.friction,
+    Coal.prototype.restitution
+);
+//--------------------------------------------------------------------
 function makeCoalGeometry() {
     var geom = new THREE.Geometry();
     geom.vertices.push(new THREE.Vector3(-1.00, -2.00, -0.65));
