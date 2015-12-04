@@ -57,9 +57,12 @@ function init() {
 
     var aspect = window.innerWidth / window.innerHeight;
     camera = new THREE.PerspectiveCamera( 45, aspect, 0.1, 10000 );
-    camera.position.set(-180, -100, 17);
-    camera.lookAt(new THREE.Vector3(-18.625, -104.375, 8));
+    // camera.position.set(-180, -100, 17);
+    // camera.lookAt(new THREE.Vector3(-18.625, -104.375, 8));
+    camera.position.set(-180, -140, 37);
+    camera.lookAt(new THREE.Vector3(-77, -125, 12));
     camera.up.set( 0, 0, 1 );
+    camera.updateProjectionMatrix();
 
     render_stats = new Stats();
     render_stats.domElement.style.position = 'absolute';
@@ -343,8 +346,16 @@ var input = {
 };
 
 var axis = 1;
+
 function onKeydown(e) {
 	  switch(e.keyCode){
+    case 49: // 1
+    case 50: // 2
+    case 51: // 3
+    case 52: // 4
+        console.log(e.keyCode, e.keyCode-49);
+        robot.path(e.keyCode-49).start();
+        break;
     case 81: // q
         robot.dropCart();
         break;

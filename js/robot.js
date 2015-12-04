@@ -222,8 +222,33 @@ function Robot(x0, y0, z0) {
 
     this.RADIUS = 0;
     this.OMEGA = 0;
+
+    this.currentState = 0;
 }
 
+// To execute one of these paths issue the following function call:
+//   robot.path(0).start();
+// where the argument to path selects the specific path listed below.
+Robot.prototype.path = function(p) {
+    var P = this.PATHS[p];
+    var T = [];
+    // Generate the necessary transition tweens
+    for (var i=0; i<P.length-1; ++i) {
+        T[i] = this.getTransition(P[i], P[i+1]);
+    }
+    // Chain together the transition tweens
+    for (var i=T.length-1; i>0; --i) {
+        T[i-1].chain(T[i]);
+    }
+    // Return the first tween.
+    return T[0];
+}
+
+Robot.prototype.PATHS = [
+    [ 0, 1, 2, 3 ],
+    [ 3, 2, 1, 0 ]
+];
+    
 Robot.prototype.dropCart = function() {
     if (!robot.cart.isAttached) return;
     console.log('Dropping Cart');
@@ -250,21 +275,22 @@ Robot.prototype.grabCart = function() {
     robot.cart.__dirtyRotation = true;
 }
 
-Robot.prototype.accel = function(omegaL, omegaR) {
+//--------------------------------------------------------------------
+// Accelerate the robot wheel speeds
+Robot.prototype.accel = function(alphaL, alpha) {
     var r = 3;              // wheel radius
     var d = 10;             // wheel separation
-    this.omegaL += omegaL;  // angular velocity of left wheel
-    this.omegaR += omegaR;  // angular velocity of right wheel
+    this.omegaL += alphaL;  // angular velocity of left wheel
+    this.omegaR += alphaR;  // angular velocity of right wheel
     var delta = (this.omegaR - this.omegaL)/d;
     // compute radius of turn
     this.RADIUS = (delta ? 0.5*(this.omegaL + this.omegaR)/delta : 0);
     // compute angular velocity of turn
     this.OMEGA = r*delta;
-
-    this.currentState = 0;
-    this.state = States[0];
 }
 
+//--------------------------------------------------------------------
+// Set the speeds of the robot's wheels
 Robot.prototype.setSpeed = function(omegaL, omegaR) {
     var r = 3;              // wheel radius
     var d = 10;             // wheel separation
@@ -277,6 +303,8 @@ Robot.prototype.setSpeed = function(omegaL, omegaR) {
     this.OMEGA = r*delta;
 }
 
+//--------------------------------------------------------------------
+// Update the robot's motion based on the current wheel speeds
 Robot.prototype.updateMotion = function(dt) {
     this.object.rotation.x = 0;
     this.object.rotation.y = 0;
@@ -300,6 +328,37 @@ Robot.prototype.updateMotion = function(dt) {
         this.cart.__dirtyPosition = true;
         this.cart.__dirtyRotation = true;
     }
+}
+
+//--------------------------------------------------------------------
+// Get tween for the specified transition
+Robot.prototype.getTransition = function(curr, next) {
+    console.log(Transitions[curr][next]);
+    if (!Transitions[curr][next]) {
+        console.log("Invalid transition. %s -> %s", curr, next);
+        return undefined;
+    }
+    console.log("%s -> %s", curr, next);
+    var begin = { s0: curr, s1: next };
+    var end   = { };
+    console.log("Begin: ", begin);
+    console.log("End:   ", end);
+    var tween = new TWEEN.Tween( begin )
+        .to( end, Transitions[curr][next].dt )
+        .onUpdate( function(t) {
+            var T = Transitions[this.s0][this.s1];
+            robot.object.position.x = T.x.evaluate(t);
+            robot.object.position.y = T.y.evaluate(t);
+            robot.object.rotation.z = T.z.evaluate(t);
+            robot.object.__dirtyPosition = true;
+            robot.object.__dirtyRotation = true;
+        } )
+        .onComplete( function() {
+            robot.object.__dirtyPosition = true;
+            robot.object.__dirtyRotation = true;
+            robot.currentState = next;
+        } );
+    return tween;
 }
 
 function LiftBed() {
@@ -405,53 +464,6 @@ LiftBed.prototype.liftTween = function () {
     return tween;
 }
 
-Robot.prototype.move = function(next) {
-    var curr = this.currentState;
-    if (!Transitions[curr][next]) {
-        console.log("Invalid transition. %s -> %s", curr, next);
-        return;
-    }
-    console.log("%s -> %s", curr, next);
-    var xpos = { x: this.object.position.x };
-    var xdest = { x: xpos.x + 20 };
-    var xtween = new TWEEN.Tween( xpos )
-        .to( xdest, 1000 )
-        .easing(TWEEN.Easing.Circular.Out)
-        .onUpdate( function() {
-            robot.object.position.x = this.x;
-            robot.object.__dirtyPosition = true;
-        } )
-        .onComplete( function() {
-            robot.currentState = next;
-        } )
-        .start();
-    var ypos = { y: this.object.position.y };
-    var ydest = { y: ypos.y - 20 };
-    var ytween = new TWEEN.Tween( ypos )
-        .to( ydest, 1000 )
-        .easing(TWEEN.Easing.Circular.In)
-        .onUpdate( function() {
-            robot.object.position.y = this.y;
-            robot.object.__dirtyPosition = true;
-        } )
-        .onComplete( function() {
-            robot.currentState = next;
-        } )
-        .start();
-    var zrot = { z: this.object.rotation.z };
-    var zdest = { z: zrot.z - Math.PI/2 };
-    var ztween = new TWEEN.Tween( zrot )
-        .to( zdest, 1000 )
-        .onUpdate( function() {
-            robot.object.rotation.z = this.z;
-            robot.object.__dirtyRotation = true;
-        } )
-        .onComplete( function() {
-            robot.currentState = next;
-        } )
-        .start();
-}
-
 function BezierCurve(b) {
     this.k = b.length;
     this.b = b;
@@ -462,32 +474,86 @@ BezierCurve.prototype.evaluate = function(t) {
     for (var p=0; p<this.k; ++p) {
         b[p] = this.b[p];
     }
-    for (var m=k-1; m>=0; --m) {
+    for (var m=this.k-1; m>=0; --m) {
         for (var p=0; p<m; ++p) {
-            b[p] = (1-t)*b[p+1] + t*b[p];
+            b[p] = (1-t)*b[p] + t*b[p+1];
         }
     }
     return b[0];
 };
 
 var States = [
-    { // State 0 - Start box facing east
-        x: -135, y: -60.75, theta: 0
+    { // State 0 - Start box, facing east
+        x: -135, y:  -60, theta:  0
     },
-    { // State 1 - Near spare parts bin facing south
-        x: -100, y: -95, theta: -Math.PI/2
+    { // State 1 - Ground Level (center), facing south
+        x: -110, y:  -85, theta: -Math.PI/2
     },
-    { // State 2 - Start box facing west
-        x: -135, y: -60.75, theta: Math.PI
+    { // State 2 - Gate 1, facing east
+        x:  -77, y: -125, theta:  0
+    },
+    { // State 3 - Coal chute, facing north
+        x:  -50, y:  -105, theta:  Math.PI/2
     },
 ];
 
+//--------------------------------------------------------------------
+// TRANSITIONS
 var Transitions = [];
+//------------------------------------------------
 // From State 0
 Transitions[0] = []
-// To State1
-Transitions[0][1] = [
-    x: new BezierCurve(States[0].x, States[1].x, States[1].x),
-    y: new BezierCurve(States[0].y, States[0].y, States[1].y),
-    z: new BezierCurve(States[0].theta, States[1].theta)
-}
+// To State 1
+Transitions[0][1] = {
+    x: new BezierCurve([States[0].x, States[1].x, States[1].x]),
+    y: new BezierCurve([States[0].y, States[0].y, States[1].y]),
+    z: new BezierCurve([States[0].theta, States[1].theta]),
+    dt: 4000
+};
+//------------------------------------------------
+// From State 1
+Transitions[1] = []
+// To State 2
+Transitions[1][2] = {
+    x: new BezierCurve([States[1].x, States[1].x, States[2].x]),
+    y: new BezierCurve([States[1].y, States[2].y, States[2].y]),
+    z: new BezierCurve([States[1].theta, States[2].theta]),
+    dt: 4000
+};
+// To State 0
+Transitions[1][0] = {
+    x: new BezierCurve([States[1].x, States[1].x, States[0].x]),
+    y: new BezierCurve([States[1].y, States[0].y, States[0].y]),
+    z: new BezierCurve([States[1].theta, States[0].theta]),
+    dt: 4000
+};
+
+//------------------------------------------------
+// From State 2
+Transitions[2] = []
+// To State 3
+Transitions[2][3] = {
+    x: new BezierCurve([States[2].x, States[3].x, States[3].x]),
+    y: new BezierCurve([States[2].y, States[2].y, States[3].y]),
+    z: new BezierCurve([States[2].theta, States[3].theta]),
+    dt: 4000
+};
+// To State 1
+Transitions[2][1] = {
+    x: new BezierCurve([States[2].x, States[1].x, States[1].x]),
+    y: new BezierCurve([States[2].y, States[2].y, States[1].y]),
+    z: new BezierCurve([States[2].theta, States[1].theta]),
+    dt: 4000
+};
+
+//------------------------------------------------
+// From State 3
+Transitions[3] = []
+// To State 2
+Transitions[3][2] = {
+    x: new BezierCurve([States[3].x, States[3].x, States[2].x]),
+    y: new BezierCurve([States[3].y, States[2].y, States[2].y]),
+    z: new BezierCurve([States[3].theta, States[2].theta]),
+    dt: 4000
+};
+
