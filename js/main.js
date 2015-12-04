@@ -10,6 +10,7 @@ if (usePhysics) {
 
 var render_stats, physics_stats;
 var camera, scene, renderer, controls, gamepad;
+var clock = new THREE.Clock();
 
 var robot;
 var activeSection = 0;
@@ -22,6 +23,8 @@ var magnetiteVein = [];
 var spodumeneTower;
 
 var nullVec = new THREE.Vector3( 0, 0, 0 );
+var xyVec = new THREE.Vector3( 1, 1, 0 );
+var xyzVec = new THREE.Vector3( 1, 1, 1 );
 var xAxis = new THREE.Vector3( 1, 0, 0 );
 var yAxis = new THREE.Vector3( 0, 1, 0 );
 var zAxis = new THREE.Vector3( 0, 0, 1 );
@@ -105,6 +108,16 @@ function init() {
     robot.object.translateZ( z );
     scene.add( robot.object );
 
+    robot.cart = makeCopperCart(WOODMat);
+    robot.cart.translateX( x + 10.5 );
+    robot.cart.translateY( y );
+    robot.cart.translateZ( z - 2 );
+    robot.cart.rotateOnAxis(zAxis, Math.PI/2);
+    robot.cart.setLinearFactor(nullVec);
+    robot.cart.setAngularFactor(nullVec);
+    robot.cart.isAttached = true;
+    scene.add(robot.cart);
+    
     renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
@@ -330,74 +343,86 @@ var input = {
 
 var axis = 1;
 function onKeydown(e) {
-    var step = 1;
 	  switch(e.keyCode){
-	  case 87://w
-        robot.move( 10, 0, 0 );
-        break;
-	  // case 87://w
-	  //     robot.object.translateX( step ) ;
-    //     robot.object.__dirtyPosition = true;
-    //     // robot.wL.configureAngularMotor( axis, 1, 0, 5, 200 );
-    //     // robot.wR.configureAngularMotor( axis, 1, 0, 5, 200 );
-    //     // robot.wL.enableAngularMotor( axis );
-    //     // robot.wR.enableAngularMotor( axis );
-	  //     break;
-	  // case 65://a
-	  //     robot.object.rotateOnAxis( zAxis, Math.PI/36 );
-    //     robot.object.__dirtyRotation = true;
-	  //     break;
-	  // case 83://s
-	  //     robot.object.translateX( -step ) ;
-    //     robot.object.__dirtyPosition = true;
-    //     // robot.wL.configureAngularMotor( axis, 1, 0, -5, 200 );
-    //     // robot.wR.configureAngularMotor( axis, 1, 0, -5, 200 );
-    //     // robot.wL.enableAngularMotor( axis );
-    //     // robot.wR.enableAngularMotor( axis );
-	  //     break;
-	  // case 68://d
-	  //     robot.object.rotateOnAxis( zAxis, -Math.PI/36 );
-    //     robot.object.__dirtyRotation = true;
-	  //     break;
     case 81: // q
         robot.dropCart();
         break;
-	  case 67://c
+    case 82: // r
+        robot.lifter.raiseBed();
+        break;
+    case 70: // f
+        robot.lifter.lowerBed();
+        break;
+	  case 87: // w
+        robot.setSpeed( 2,  2);
+	      break;
+	  case 65: // a
+        robot.setSpeed(-1,  1);
+	      break;
+	  case 83: // s
+        robot.setSpeed(-2, -2);
+	      break;
+	  case 68: // d
+        robot.setSpeed( 1, -1);
+	      break;
+	  case 67: // c
 	      triggerCoalChute( activeSection );
 	      break;
-	  case 77://m
+	  case 77: // m
 	      triggerMagnetiteVein( activeSection );
 	      break;
+	  case 97: // Numpad 1
+        robot.accel(-1,  0);
+	      break;
+	  case 98: // Numpad 2
+        robot.accel(-1, -1);
+	      break;
+	  case 99: // Numpad 3
+        robot.accel( 0, -1);
+	      break;
+	  case 100: // Numpad 4
+        robot.accel(-1,  1);
+	      break;
+	  case 100: // Numpad 5
+        robot.setSpeed(0,  0);
+	      break;
+	  case 102: // Numpad 6
+        robot.accel( 1, -1);
+	      break;
+	  case 103: // Numpad 7
+        robot.accel( 0,  1);
+	      break;
+	  case 104: // Numpad 8
+        robot.accel( 1,  1);
+	      break;
+	  case 105: // Numpad 9
+        robot.accel( 1,  0);
+	      break;
+    default:
+        console.log(e.keyCode);
+        break;
 	  }
 }
 
 function onKeyup(e) {
-    // return;
-    // var step = 1;
-	  // switch(e.keyCode){
-	  // case 87://w
-    //     robot.wL.disableAngularMotor( axis );
-    //     robot.wR.disableAngularMotor( axis );
-	  //     break;
-	  // case 65://a
-	  //     robot.object.rotateOnAxis( zAxis, Math.PI/36 );
-    //     robot.object.__dirtyRotation = true;
-	  //     break;
-	  // case 83://s
-	  //     robot.object.translateX( -step ) ;
-    //     robot.object.__dirtyPosition = true;
-	  //     break;
-	  // case 68://d
-	  //     robot.object.rotateOnAxis( zAxis, -Math.PI/36 );
-    //     robot.object.__dirtyRotation = true;
-	  //     break;
-	  // case 67://c
-	  //     triggerCoalChute( activeSection );
-	  //     break;
-	  // case 77://m
-	  //     triggerMagnetiteVein( activeSection );
-	  //     break;
-	  // }
+	  switch(e.keyCode){
+	  case 87: // w
+	  case 65: // a
+	  case 83: // s
+	  case 68: // d
+        robot.setSpeed( 0,  0);
+        break;
+	  case 97: // Numpad 1
+	  case 98: // Numpad 2
+	  case 99: // Numpad 3
+	  case 100:// Numpad 4
+	  case 102:// Numpad 6
+	  case 103:// Numpad 7
+	  case 104:// Numpad 8
+	  case 105:// Numpad 9
+        //robot.setSpeed( 0,  0);
+	      break;
+	  }
 }
     
 function updateJoystick() {
@@ -429,10 +454,11 @@ function onWindowResize(e) {
 }
 
 function render() {
+    var dt = clock.getDelta();
     requestAnimationFrame( render );
     updateJoystick();
     TWEEN.update();
-    //scene.simulate();
+    robot.updateMotion(dt);
     renderer.render( scene, camera );
     render_stats.update();
 }
