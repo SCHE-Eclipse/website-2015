@@ -1,7 +1,7 @@
 //if (!Detector.webgl) Detector.addGetWebGLMessage();
 
 var usePhysics = true;
-var useShadows = true;
+var useShadows = false;
 
 if (usePhysics) {
     Physijs.scripts.worker = 'js/libs/physijs_worker.js';
