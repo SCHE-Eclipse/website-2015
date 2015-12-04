@@ -83,6 +83,12 @@ function addDynamicObjects() {
         // Coal pieces
         addCoalPieces(i);
 
+        // var cart = makeCopperCart(WOODMat);
+        // cart.rotateOnAxis(zAxis, phi);
+        // cart.translateX(-50);
+        // cart.translateY(-90);
+        // scene.add(cart);
+        
         // Magnetite vein
         magnetiteVein[i] = makeMagnetiteVein(colorMats[i]);
         magnetiteVein[i].rotateOnAxis( zAxis, phi );

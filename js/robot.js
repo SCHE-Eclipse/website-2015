@@ -198,21 +198,29 @@ function Robot() {
     this.object.add(baseMesh);
     this.object.add(frontMesh);
     
-    this.cart = makeCopperCart(WOODMat);
-    this.cart.translateX( 7.5 );
-    this.cart.translateZ( -2 );
-    this.cart.rotateOnAxis( zAxis, Math.PI/2 );
-    this.lifter.obj.add( this.cart );
-    this.cart.isAttached = true;
+    this.cartPos = new THREE.Object3D();
+    this.cartPos.translateX( 7.5 );
+    this.cartPos.translateZ( -2 );
+    this.cartPos.rotateOnAxis( zAxis, Math.PI/2 );
+    this.lifter.obj.add( this.cartPos );
+
+    this.omegaL = 0;
+    this.omegaR = 0;
+
+    this.RADIUS = 0;
+    this.OMEGA = 0;
 }
 
 Robot.prototype.dropCart = function() {
     function drop() {
         console.log('Dropping Cart');
-        robot.cart.applyMatrix( robot.lifter.obj.matrixWorld );
-        robot.lifter.obj.remove( robot.cart );
-        scene.add( robot.cart );
+        var pos = robot.lifter.obj.localToWorld( robot.cartPos.position );
+        robot.cart.position.set(pos.x, pos.y, pos.z);
+        robot.cart.setLinearFactor(xyzVec);
+        robot.cart.setAngularFactor(xyzVec);
         robot.cart.isAttached = false;
+        robot.cart.__dirtyPosition = true;
+        robot.cart.__dirtyRotation = true;
     }
     if (robot.cart.isAttached) {
         if (robot.lifter.raised) {
@@ -228,6 +236,51 @@ Robot.prototype.dropCart = function() {
         else {
             drop();
         }
+    }
+}
+
+Robot.prototype.accel = function(omegaL, omegaR) {
+    var r = 3;              // wheel radius
+    var d = 10;             // wheel separation
+    this.omegaL += omegaL;  // angular velocity of left wheel
+    this.omegaR += omegaR;  // angular velocity of right wheel
+    var delta = (this.omegaR - this.omegaL)/d;
+    // compute radius of turn
+    this.RADIUS = (delta ? 0.5*(this.omegaL + this.omegaR)/delta : 0);
+    // compute angular velocity of turn
+    this.OMEGA = r*delta;
+}
+
+Robot.prototype.setSpeed = function(omegaL, omegaR) {
+    var r = 3;              // wheel radius
+    var d = 10;             // wheel separation
+    this.omegaL = omegaL;  // angular velocity of left wheel
+    this.omegaR = omegaR;  // angular velocity of right wheel
+    var delta = (this.omegaR - this.omegaL)/d;
+    // compute radius of turn
+    this.RADIUS = (delta ? 0.5*(this.omegaL + this.omegaR)/delta : 0);
+    // compute angular velocity of turn
+    this.OMEGA = r*delta;
+}
+
+Robot.prototype.updateMotion = function(dt) {
+    if (this.omegaL == 0 && this.omegaR == 0) {
+        return;
+    }
+    else if (this.omegaL == this.omegaR) {
+        var s = 3*dt*this.omegaL;
+        this.object.translateX(s);
+    }
+    else {
+        var t = this.OMEGA*dt
+        var s = this.RADIUS*t;
+        this.object.translateX(s/2);
+        this.object.rotateOnAxis(zAxis,t);
+        this.object.translateX(s/2);
+    }
+    if (this.cart.isAttached) {
+        this.cart.__dirtyPosition = true;
+        this.cart.__dirtyRotation = true;
     }
 }
 
@@ -313,9 +366,13 @@ LiftBed.prototype.liftTween = function () {
             for (var i=0; i<4; ++i) {
                 robot.lifter.axel[i].rotation.y = -this.currAngle;
             }
+            robot.cart.__dirtyPosition = true;
+            robot.cart.__dirtyRotation = true;
         } )
         .onComplete( function() {
             robot.lifter.raised = (this.currAngle == robot.lifter.raiseAngle);
+            robot.cart.__dirtyPosition = true;
+            robot.cart.__dirtyRotation = true;
         } );
     return tween;
 }
