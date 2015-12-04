@@ -7,7 +7,7 @@ function Coal(enablePhysics, enableShadows) {
     this.shadows = ( enableShadows === undefined ? useShadows :
                      enableShadows && useShadows );
     if (this.physics) {
-        this.mesh = new Physijs.ConvexMesh( this.geometry,
+        this.mesh = new Physijs.BoxMesh( this.geometry,
                                             this.substance,
                                             this.mass );
     }
@@ -22,7 +22,7 @@ function Coal(enablePhysics, enableShadows) {
 //--------------------------------------------------------------------
 // The prototype holds shared properties
 //--------------------------------------------------------------------
-Coal.prototype.mass = 10;
+Coal.prototype.mass = 1;
 Coal.prototype.friction = 0.8;
 Coal.prototype.restitution = 0.8;
 Coal.prototype.geometry = makeCoalGeometry();

@@ -310,18 +310,22 @@ function addMagnetitePieces(section) {
 // SubLevel 2
 //--------------------------------------------------------------------
 function makeCopperCart(mat) {
-    var baseGeom        = new THREE.BoxGeometry(3.5, 12, 1.5);
+    var baseGeom       = new THREE.BoxGeometry(3.5, 12, 1.5);
     var sideGeom       = new THREE.BoxGeometry(0.5, 12, 8.25);
+    var endBox         = new THREE.BoxGeometry( 8.875, 0.5, 8 );
     var endGeom        = makeCustomBoard(
         [ -2.25, -4.4375, -2.25, -4.4375,  2.25,  4.4375,  2.25,  4.4375 ],
         [ -0.25, -0.2500,  0.25,  0.2500, -0.25, -0.2500,  0.25,  0.2500 ],
         [ -4.00,  4.0000, -4.00,  4.0000, -4.00,  4.0000, -4.00,  4.0000 ]
     );
-    var base        = makeBoxMesh( baseGeom,       mat );
-    var side1       = makeBoxMesh( sideGeom,       mat );
-    var side2       = makeBoxMesh( sideGeom,       mat );
-    var end1        = makeBoxMesh( endGeom,       mat );
-    var end2        = makeBoxMesh( endGeom,       mat );
+    var base        = makeBoxMesh( baseGeom, mat, 500 );
+    var side1       = makeBoxMesh( sideGeom, mat, 500 );
+    var side2       = makeBoxMesh( sideGeom, mat, 500 );
+    var end1        = makeBoxMesh( endBox,  mat, 500 );
+    var end2        = makeBoxMesh( endBox,  mat, 500 );
+    var endMesh1 = new THREE.Mesh( endGeom, mat );
+    var endMesh2 = new THREE.Mesh( endGeom, mat );
+
     base.translateZ( 0.75);
 
     side1.castShadow = useShadows;
@@ -336,20 +340,30 @@ function makeCopperCart(mat) {
     side2.translateZ( 3.5 );
     side2.rotateOnAxis(  yAxis,  Math.PI/12 );
     
-    end1.castShadow = useShadows;
-    end1.receiveShadow = useShadows;
     end1.translateY( 6.25 );
     end1.translateZ( 3.46875 );
-    
-    end2.castShadow = useShadows;
-    end2.receiveShadow = useShadows;
+    end1.visible = false;
+
     end2.translateY( -6.25 );
     end2.translateZ( 3.46875 );
+    end2.visible = false;
+
+    endMesh1.castShadow = useShadows;
+    endMesh1.receiveShadow = useShadows;
+    endMesh1.translateY( 6.25 );
+    endMesh1.translateZ( 3.46875 );
+    
+    endMesh2.castShadow = useShadows;
+    endMesh2.receiveShadow = useShadows;
+    endMesh2.translateY( -6.25 );
+    endMesh2.translateZ( 3.46875 );
 
     base.add(side1);
     base.add(side2);
     base.add(end1);
     base.add(end2);
+    base.add(endMesh1);
+    base.add(endMesh2);
     return base;
 }
 

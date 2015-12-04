@@ -75,7 +75,7 @@ function init() {
         div.appendChild(physics_stats.domElement);
 
         scene = new Physijs.Scene({ reportsize: 500, fixedTimeStep: 1/60 });
-        scene.setGravity( new THREE.Vector3( 0, 0, -30 ) );
+        scene.setGravity( new THREE.Vector3( 0, 0, -50 ) );
         scene.addEventListener(
             'update',
             function() {
@@ -108,15 +108,15 @@ function init() {
     robot.object.translateZ( z );
     scene.add( robot.object );
 
-    robot.cart = makeCopperCart(WOODMat);
-    robot.cart.translateX( x + 10.5 );
-    robot.cart.translateY( y );
-    robot.cart.translateZ( z - 2 );
-    robot.cart.rotateOnAxis(zAxis, Math.PI/2);
-    robot.cart.setLinearFactor(nullVec);
-    robot.cart.setAngularFactor(nullVec);
-    robot.cart.isAttached = true;
-    scene.add(robot.cart);
+    // robot.cart = makeCopperCart(WOODMat);
+    // robot.cart.translateX( x + 10.5 );
+    // robot.cart.translateY( y );
+    // robot.cart.translateZ( z - 2 );
+    // robot.cart.rotateOnAxis(zAxis, Math.PI/2);
+    // robot.cart.setLinearFactor(nullVec);
+    // robot.cart.setAngularFactor(nullVec);
+    // robot.cart.isAttached = true;
+    // scene.add(robot.cart);
     
     renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio( window.devicePixelRatio );
@@ -136,13 +136,14 @@ function init() {
         var gp = navigator.getGamepads()[e.gamepad.index];
         console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
                     gp.index, gp.id, gp.buttons.length, gp.axes.length);
-        gamepad = gp;
+        if (gp.id == 'xinput') gamepad = gp;
     });
     window.addEventListener('gamepaddisconnected', function(e) {
         var gp = navigator.getGamepads()[e.gamepad.index];
         console.log("Gamepad disconnected at index %d:", gp.index);
-        gamepad = null;
+        if (gp.id == 'xinput') gamepad = null;
     });
+
     if (usePhysics) {
         scene.simulate( undefined, 2 );
     }
@@ -347,6 +348,9 @@ function onKeydown(e) {
     case 81: // q
         robot.dropCart();
         break;
+    case 69: // e
+        robot.grabCart();
+        break;
     case 82: // r
         robot.lifter.raiseBed();
         break;
@@ -357,7 +361,7 @@ function onKeydown(e) {
         robot.setSpeed( 2,  2);
 	      break;
 	  case 65: // a
-        robot.setSpeed(-1,  1);
+        robot.setSpeed(-1,  1);e
 	      break;
 	  case 83: // s
         robot.setSpeed(-2, -2);
@@ -426,14 +430,58 @@ function onKeyup(e) {
 }
     
 function updateJoystick() {
-    if (!gamepad) return;
-    var dy = gamepad.axes[3];
-    var dx = gamepad.axes[2];
+    gamepad = navigator.getGamepads()[0];
+    if (!gamepad || !gamepad.connected) return;
+
+    // Left stick
+    var LX = gamepad.axes[0];
+    var LY = gamepad.axes[1];
+    // Right stick
+    var RX = -gamepad.axes[2];
+    var RY = -gamepad.axes[3];
+    // Buttons
+    var A = gamepad.buttons[0].pressed;
+    var B = gamepad.buttons[1].pressed;
+    var X = gamepad.buttons[2].pressed;
+    var Y = gamepad.buttons[3].pressed;
+    // Shoulder buttons
+    var LB = gamepad.buttons[4];
+    var RB = gamepad.buttons[5];
+    // Triggers (analog)
+    var LT = gamepad.buttons[6];
+    var RT = gamepad.buttons[7];
+    // 
+    var BACK = gamepad.buttons[8];
+    var START = gamepad.buttons[9];
+    // Stick presses
+    var LS = gamepad.buttons[10];
+    var RS = gamepad.buttons[11];
+    // D-pad
+    var DN = gamepad.buttons[12];
+    var DS = gamepad.buttons[13];
+    var DW = gamepad.buttons[14];
+    var DE = gamepad.buttons[15];
+
+    if ( (RX*RX + RY*RY) > 0.2 ) {
+        robot.setSpeed(2*RY-RX, 2*RY+RX);
+    }
+    else {
+        robot.setSpeed(0,0);
+    }
+
+    if (A) {
+        robot.lifter.lowerBed();
+    }
+    if (B) {
+        robot.lifter.raiseBed();
+    }
 /*
+    // Right stick drives the robot
     var pL = maxPower;
     var pR = maxPower;
-    var vL = maxSpeed*(dy-dx);
-    var vR = maxSpeed*(dy+dx);
+    var vL = maxSpeed*(RY-RX);
+    var vR = maxSpeed*(RY+RX);
+
     if (Math.abs(vL) > 0.1 || Math.abs(vR) > 0.1) {
 		    robot.axleL.configureAngularMotor( 0, 1, 0, vL, pL );
 		    robot.axleR.configureAngularMotor( 0, 1, 0, vR, pR );
@@ -444,6 +492,70 @@ function updateJoystick() {
 		    robot.axleL.disableAngularMotor( 0 );
 		    robot.axleR.disableAngularMotor( 0 );
     }
+
+    // Use A/B to activate the claw
+    var fL = robot.fingerL.localToWorld(new THREE.Vector3(0,1.5,0));
+    var fR = robot.fingerR.localToWorld(new THREE.Vector3(0,1.5,0));
+    var r = new THREE.Vector3((fL.x+fR.x)/2,(fL.y+fR.y)/2,(fL.z+fR.z));
+    if (A && !grippedItem) { // Pick something up
+        for (var i=0; i<3; ++i) {
+            // Get the world coordinates of the top of the chicken
+            var s = chickens[i].localToWorld(new THREE.Vector3(0,5,0));
+            // Get the location of the claw with respect to the chicken
+            var d = s.sub(r);
+            if (d.length() < 10) {
+                console.log("Chicken " + i + " selected.");
+                var tmp = new THREE.Matrix4();
+                tmp.getInverse(robot.palm.matrixWorld);
+                chickens[i].applyMatrix(tmp);
+                scene.remove( chickens[i] );
+                robot.palm.add( chickens[i] );
+                grippedItem = chickens[i];
+                break;
+            }
+        }
+    }
+    if (B && grippedItem) { // Drop something
+        grippedItem.applyMatrix( robot.palm.matrixWorld );
+        grippedItem.setLinearFactor(new THREE.Vector3(0,0,0));
+        grippedItem.setAngularFactor(new THREE.Vector3(0,0,0));
+        robot.palm.remove( grippedItem );
+        scene.add( grippedItem );
+        grippedItem.setLinearFactor(new THREE.Vector3(1,1,1));
+        grippedItem.setAngularFactor(new THREE.Vector3(1,1,1));
+        grippedItem = null;
+    }
+
+    if (X) {
+        toggleSmallMast(activeSection);
+    }
+    if (Y) {
+        toggleLargeMast(activeSection);
+    }
+    if (B) {
+        toggleSmallBlades(activeSection);
+    }
+    if (A) {
+        toggleGates(activeSection);
+    }
+
+    if (DN) {
+        robot.arm.rotation.x -= 5*Math.PI/180;
+    }
+    if (DS) {
+        robot.arm.rotation.x += 5*Math.PI/180;
+    }
+*/
+/*
+    // Left stick controls the camera
+    if (LS) {
+        controls.pan(LX, LY);
+    }
+    else {
+        controls.rotateLeft(LX*Math.PI/180);
+        controls.rotateUp(LY*Math.PI/180);
+    }
+    controls.update();
 */
 }
 

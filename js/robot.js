@@ -15,8 +15,9 @@ function Robot(x0, y0, z0) {
     var geomShort = new THREE.CylinderGeometry( 0.375, 0.375, 1, 8);
     var geomArmSupport = new THREE.CylinderGeometry(0.375, 0.375, 8, 8);
 
-    this.object = new THREE.Object3D();
-    
+    this.object = new makeBoxMesh( new THREE.BoxGeometry( 4, 8, 2 ),
+                                   WOODMat, 1000 );
+
     // Lifter Base
     var cyl1L = new THREE.Mesh( cylGeom10, PVCMat );
     var cyl1R = new THREE.Mesh( cylGeom10, PVCMat );
@@ -171,8 +172,10 @@ function Robot(x0, y0, z0) {
     this.object.add(this.arm);
 
     // Wheels
-    this.wheelL = new THREE.Mesh( wheelGeom, WOODMat );
-    this.wheelR = new THREE.Mesh( wheelGeom, WOODMat );
+    // this.wheelL = new THREE.Mesh( wheelGeom, WOODMat );
+    // this.wheelR = new THREE.Mesh( wheelGeom, WOODMat );
+    this.wheelL = makeCylinderMesh( wheelGeom, WOODMat, 100 );
+    this.wheelR = makeCylinderMesh( wheelGeom, WOODMat, 100 );
     this.wheelL.translateY(  5 );
     this.wheelR.translateY( -5 );
     this.object.add( this.wheelL );
@@ -204,6 +207,16 @@ function Robot(x0, y0, z0) {
     this.cartPos.rotateOnAxis( zAxis, Math.PI/2 );
     this.lifter.obj.add( this.cartPos );
 
+    this.cart = makeCopperCart(WOODMat);
+    this.cart.translateX( 7.5 );
+    this.cart.translateY( 0.0 );
+    this.cart.translateZ( -2 );
+    this.cart.rotateOnAxis(zAxis, Math.PI/2);
+    this.cart.setLinearFactor(nullVec);
+    this.cart.setAngularFactor(nullVec);
+    this.cart.isAttached = true;
+    this.lifter.obj.add(this.cart);
+
     this.omegaL = 0;
     this.omegaR = 0;
 
@@ -212,31 +225,29 @@ function Robot(x0, y0, z0) {
 }
 
 Robot.prototype.dropCart = function() {
-    function drop() {
-        console.log('Dropping Cart');
-        var pos = robot.lifter.obj.localToWorld( robot.cartPos.position );
-        robot.cart.position.set(pos.x, pos.y, pos.z);
-        robot.cart.setLinearFactor(xyzVec);
-        robot.cart.setAngularFactor(xyzVec);
-        robot.cart.isAttached = false;
-        robot.cart.__dirtyPosition = true;
-        robot.cart.__dirtyRotation = true;
-    }
-    if (robot.cart.isAttached) {
-        if (robot.lifter.raised) {
-            // Lower the bed if necessary
-            var tween = this.lifter.liftTween();
-            tween.onComplete( function() {
-                robot.lifter.raised = false;
-                drop();
-            } );
-            console.log("Lowering the bed.");
-            tween.start();
-        }
-        else {
-            drop();
-        }
-    }
+    if (!robot.cart.isAttached) return;
+    console.log('Dropping Cart');
+    robot.cart.applyMatrix( robot.lifter.obj.matrixWorld );
+    robot.cart.setLinearFactor(xyzVec);
+    robot.cart.setAngularFactor(xyzVec);
+    robot.lifter.obj.remove( robot.cart );
+    scene.add( robot.cart );
+    robot.cart.isAttached = false;
+    robot.cart.__dirtyPosition = true;
+    robot.cart.__dirtyRotation = true;
+}
+
+Robot.prototype.grabCart = function() {
+    if (robot.cart.isAttached) return;
+    console.log("Grabbing cart.");
+    var tmp = new THREE.Matrix4();
+    tmp.getInverse( robot.lifter.obj.matrixWorld );
+    robot.cart.applyMatrix( tmp );
+    scene.remove( robot.cart );
+    robot.lifter.obj.add( robot.cart );
+    robot.cart.isAttached = true;
+    robot.cart.__dirtyPosition = true;
+    robot.cart.__dirtyRotation = true;
 }
 
 Robot.prototype.accel = function(omegaL, omegaR) {
@@ -254,22 +265,153 @@ Robot.prototype.accel = function(omegaL, omegaR) {
     this.state = States[0];
 }
 
-Robot.prototype.dropCart = function() {
-    if (this.cartAttached) {
-        var s = this.cart.localToWorld( new THREE.Vector3(0,0,0) );
-        this.object.remove( this.cart );
-        this.cart.position = s;
+Robot.prototype.setSpeed = function(omegaL, omegaR) {
+    var r = 3;              // wheel radius
+    var d = 10;             // wheel separation
+    this.omegaL = omegaL;  // angular velocity of left wheel
+    this.omegaR = omegaR;  // angular velocity of right wheel
+    var delta = (this.omegaR - this.omegaL)/d;
+    // compute radius of turn
+    this.RADIUS = (delta ? 0.5*(this.omegaL + this.omegaR)/delta : 0);
+    // compute angular velocity of turn
+    this.OMEGA = r*delta;
+}
+
+Robot.prototype.updateMotion = function(dt) {
+    this.object.rotation.x = 0;
+    this.object.rotation.y = 0;
+    if (this.omegaL == 0 && this.omegaR == 0) {
+        return;
+    }
+    else if (this.omegaL == this.omegaR) {
+        var s = 3*dt*this.omegaL;
+        this.object.translateX(s);
+    }
+    else {
+        var t = this.OMEGA*dt
+        var s = this.RADIUS*t;
+        this.object.translateX(s/2);
+        this.object.rotateOnAxis(zAxis,t);
+        this.object.translateX(s/2);
+    }
+    this.object.__dirtyPosition = true;
+    this.object.__dirtyRotation = true;
+    if (this.cart.isAttached) {
         this.cart.__dirtyPosition = true;
-        scene.add( this.cart );
-        this.cartAttached = false;
+        this.cart.__dirtyRotation = true;
     }
 }
 
-Robot.prototype.move = function(dx, dy, dphi) {
+function LiftBed() {
+    this.lowerAngle =  0.125*Math.PI;
+    this.raiseAngle =  0.5*Math.PI;
+    this.currAngle = this.raiseAngle;
+    this.raised = true;
+    
+    var elbowGeom = new THREE.TorusGeometry(1.5, 0.625, 12, 12, Math.PI/2);
+    var cylSideGeom = new THREE.CylinderGeometry( 0.5, 0.5, 10 );
+    var cylBackGeom = new THREE.CylinderGeometry( 0.5, 0.5, 6 );
+    var suppGeom = new THREE.BoxGeometry(4, 0.5, 0.75);
+
+    var elbowL = new THREE.Mesh( elbowGeom, PVCMat );
+    var elbowR = new THREE.Mesh( elbowGeom, PVCMat );
+    var cylL = new THREE.Mesh( cylSideGeom, PVCMat );
+    var cylR = new THREE.Mesh( cylSideGeom, PVCMat );
+    // var cylB = new THREE.Mesh( cylBackGeom, PVCMat );
+    this.obj = makeCylinderMesh( cylBackGeom, PVCMat, 100 );
+    
+    elbowL.translateX( 1.5 );
+    elbowL.translateY( 2.5 );
+    elbowL.rotateOnAxis( zAxis, Math.PI/2 );
+    // cylB.add( elbowL );
+    this.obj.add( elbowL );
+    
+    elbowR.translateX( 1.5 );
+    elbowR.translateY(-2.5 );
+    elbowR.rotateOnAxis( zAxis, Math.PI );
+    // cylB.add( elbowR );
+    this.obj.add( elbowR );
+
+    cylL.translateX( 6.0 );
+    cylL.translateY( 4.0 );
+    cylL.translateZ( 0.0 );
+    cylL.rotateOnAxis( zAxis, Math.PI/2 );
+    // cylB.add( cylL );
+    this.obj.add( cylL );
+    
+    cylR.translateX( 6.0 );
+    cylR.translateY(-4.0 );
+    cylR.translateZ( 0.0 );
+    cylR.rotateOnAxis( zAxis, Math.PI/2 );
+    // cylB.add( cylR );
+    this.obj.add( cylR );
+    
+    // this.obj = new THREE.Object3D();
+    // this.obj.add( cylB );
+
+    this.axel = [];
+    for (var i=0; i<4; ++i) {
+        this.axel[i] = new THREE.Object3D();
+        var supp = new THREE.Mesh( suppGeom, WOODMat );
+        supp.translateX(-1.5);
+        this.axel[i].add(supp);
+        this.axel[i].position.x = (i<2 ? 4 : 10);
+        this.axel[i].position.y = (i%2 ? 4.75 : -4.75);
+        this.axel[i].position.z = 0;
+        this.axel[i].rotation.y = -this.currAngle;
+        // cylB.add( this.axel[i] );
+        this.obj.add( this.axel[i] );
+    }
+    // this.obj.translateX( 5 );
+    // this.obj.translateZ( 0 );
+    this.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
+    this.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
+}
+
+LiftBed.prototype.raiseBed = function() {
+    if (this.raised) return;
+    console.log("Raising the bed.");
+    this.liftTween().start();
+}
+
+LiftBed.prototype.lowerBed = function() {
+    if (!this.raised) return;
+    console.log("Lowering the bed.");
+    this.liftTween().start();
+}
+
+LiftBed.prototype.liftTween = function () {
+    var tween = new TWEEN.Tween( this )
+        .to( { currAngle: (this.raised ? this.lowerAngle : this.raiseAngle) },
+             1000 )
+        .onUpdate( function() {
+            robot.lifter.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
+            robot.lifter.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
+            for (var i=0; i<4; ++i) {
+                robot.lifter.axel[i].rotation.y = -this.currAngle;
+            }
+            if (robot.cart.isAttached) {
+                robot.cart.__dirtyPosition = true;
+                robot.cart.__dirtyRotation = true;
+            }
+        } )
+        .onComplete( function() {
+            robot.lifter.raised = (this.currAngle == robot.lifter.raiseAngle);
+            if (robot.cart.isAttached) {
+                robot.cart.__dirtyPosition = true;
+                robot.cart.__dirtyRotation = true;
+            }
+        } );
+    return tween;
+}
+
+Robot.prototype.move = function(next) {
     var curr = this.currentState;
-    var next = Transitions[curr][0];
-    console.log(curr);
-    console.log(next);
+    if (!Transitions[curr][next]) {
+        console.log("Invalid transition. %s -> %s", curr, next);
+        return;
+    }
+    console.log("%s -> %s", curr, next);
     var xpos = { x: this.object.position.x };
     var xdest = { x: xpos.x + 20 };
     var xtween = new TWEEN.Tween( xpos )
@@ -310,16 +452,17 @@ Robot.prototype.move = function(dx, dy, dphi) {
         .start();
 }
 
-function BezierCurve(b0, b1, b2) {
-    this.cp = [ b0, b1, b2 ];
+function BezierCurve(b) {
+    this.k = b.length;
+    this.b = b;
 }
 
 BezierCurve.prototype.evaluate = function(t) {
     var b = [];
-    for (var p=0; p<3; ++p) {
-        b[p] = this.cp[p];
+    for (var p=0; p<this.k; ++p) {
+        b[p] = this.b[p];
     }
-    for (var m=2; m>=0; --m) {
+    for (var m=k-1; m>=0; --m) {
         for (var p=0; p<m; ++p) {
             b[p] = (1-t)*b[p+1] + t*b[p];
         }
@@ -339,137 +482,12 @@ var States = [
     },
 ];
 
-var Transitions = [
-    // From State 0 - To States 1
-    [ 1 ],
-    // From State 1 - To States 0 or 2
-    [ 0, 2 ],
-    // From State 2 - To States 0
-    [ 0 ],
-];
-
-Robot.prototype.setSpeed = function(omegaL, omegaR) {
-    var r = 3;              // wheel radius
-    var d = 10;             // wheel separation
-    this.omegaL = omegaL;  // angular velocity of left wheel
-    this.omegaR = omegaR;  // angular velocity of right wheel
-    var delta = (this.omegaR - this.omegaL)/d;
-    // compute radius of turn
-    this.RADIUS = (delta ? 0.5*(this.omegaL + this.omegaR)/delta : 0);
-    // compute angular velocity of turn
-    this.OMEGA = r*delta;
-}
-
-Robot.prototype.updateMotion = function(dt) {
-    if (this.omegaL == 0 && this.omegaR == 0) {
-        return;
-    }
-    else if (this.omegaL == this.omegaR) {
-        var s = 3*dt*this.omegaL;
-        this.object.translateX(s);
-    }
-    else {
-        var t = this.OMEGA*dt
-        var s = this.RADIUS*t;
-        this.object.translateX(s/2);
-        this.object.rotateOnAxis(zAxis,t);
-        this.object.translateX(s/2);
-    }
-    if (this.cart.isAttached) {
-        this.cart.__dirtyPosition = true;
-        this.cart.__dirtyRotation = true;
-    }
-}
-
-function LiftBed() {
-    this.lowerAngle =  0.125*Math.PI;
-    this.raiseAngle =  0.5*Math.PI;
-    this.currAngle = this.raiseAngle;
-    this.raised = true;
-    
-    var elbowGeom = new THREE.TorusGeometry(1.5, 0.625, 12, 12, Math.PI/2);
-    var cylSideGeom = new THREE.CylinderGeometry( 0.5, 0.5, 10 );
-    var cylBackGeom = new THREE.CylinderGeometry( 0.5, 0.5, 6 );
-    var suppGeom = new THREE.BoxGeometry(4, 0.5, 0.75);
-
-    var elbowL = new THREE.Mesh( elbowGeom, PVCMat );
-    var elbowR = new THREE.Mesh( elbowGeom, PVCMat );
-    var cylL = new THREE.Mesh( cylSideGeom, PVCMat );
-    var cylR = new THREE.Mesh( cylSideGeom, PVCMat );
-    var cylB = new THREE.Mesh( cylBackGeom, PVCMat );
-    
-    elbowL.translateX( 1.5 );
-    elbowL.translateY( 2.5 );
-    elbowL.rotateOnAxis( zAxis, Math.PI/2 );
-    cylB.add( elbowL );
-    
-    elbowR.translateX( 1.5 );
-    elbowR.translateY(-2.5 );
-    elbowR.rotateOnAxis( zAxis, Math.PI );
-    cylB.add( elbowR );
-
-    cylL.translateX( 6.0 );
-    cylL.translateY( 4.0 );
-    cylL.translateZ( 0.0 );
-    cylL.rotateOnAxis( zAxis, Math.PI/2 );
-    cylB.add( cylL );
-    
-    cylR.translateX( 6.0 );
-    cylR.translateY(-4.0 );
-    cylR.translateZ( 0.0 );
-    cylR.rotateOnAxis( zAxis, Math.PI/2 );
-    cylB.add( cylR );
-    
-    this.obj = new THREE.Object3D();
-    this.obj.add( cylB );
-
-    this.axel = [];
-    for (var i=0; i<4; ++i) {
-        this.axel[i] = new THREE.Object3D();
-        var supp = new THREE.Mesh( suppGeom, WOODMat );
-        supp.translateX(-1.5);
-        this.axel[i].add(supp);
-        this.axel[i].position.x = (i<2 ? 4 : 10);
-        this.axel[i].position.y = (i%2 ? 4.75 : -4.75);
-        this.axel[i].position.z = 0;
-        this.axel[i].rotation.y = -this.currAngle;
-        cylB.add( this.axel[i] );
-    }
-    // this.obj.translateX( 5 );
-    // this.obj.translateZ( 0 );
-    this.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
-    this.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
-}
-
-LiftBed.prototype.raiseBed = function() {
-    if (this.raised) return;
-    console.log("Raising the bed.");
-    this.liftTween().start();
-}
-
-LiftBed.prototype.lowerBed = function() {
-    if (!this.raised) return;
-    console.log("Lowering the bed.");
-    this.liftTween().start();
-}
-
-LiftBed.prototype.liftTween = function () {
-    var tween = new TWEEN.Tween( this )
-        .to( { currAngle: (this.raised ? this.lowerAngle : this.raiseAngle) },
-             1000 )
-        .onUpdate( function() {
-            robot.lifter.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
-            robot.lifter.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
-            for (var i=0; i<4; ++i) {
-                robot.lifter.axel[i].rotation.y = -this.currAngle;
-            }
-            robot.cart.__dirtyPosition = true;
-            robot.cart.__dirtyRotation = true;
-        } )
-        .onComplete( function() {
-            robot.lifter.raised = (this.currAngle == robot.lifter.raiseAngle);
-            robot.cart.__dirtyPosition = true;
-            robot.cart.__dirtyRotation = true;
-        } );
-    return tween;
+var Transitions = [];
+// From State 0
+Transitions[0] = []
+// To State1
+Transitions[0][1] = [
+    x: new BezierCurve(States[0].x, States[1].x, States[1].x),
+    y: new BezierCurve(States[0].y, States[0].y, States[1].y),
+    z: new BezierCurve(States[0].theta, States[1].theta)
 }
