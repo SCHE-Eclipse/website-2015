@@ -182,7 +182,7 @@ function Robot(x0, y0, z0) {
     this.object.add( this.wheelR );
 
     // Lifter
-    this.lifter = new LiftBed();
+    this.lifter = new Lifter();
     this.object.add( this.lifter.obj );
     
     //wooden bases
@@ -201,22 +201,6 @@ function Robot(x0, y0, z0) {
     this.object.add(baseMesh);
     this.object.add(frontMesh);
     
-    this.cartPos = new THREE.Object3D();
-    this.cartPos.translateX( 7.5 );
-    this.cartPos.translateZ( -2 );
-    this.cartPos.rotateOnAxis( zAxis, Math.PI/2 );
-    this.lifter.obj.add( this.cartPos );
-
-    this.cart = makeCopperCart(WOODMat);
-    this.cart.translateX( 7.5 );
-    this.cart.translateY( 0.0 );
-    this.cart.translateZ( -2 );
-    this.cart.rotateOnAxis(zAxis, Math.PI/2);
-    this.cart.setLinearFactor(nullVec);
-    this.cart.setAngularFactor(nullVec);
-    this.cart.isAttached = true;
-    this.lifter.obj.add(this.cart);
-
     this.omegaL = 0;
     this.omegaR = 0;
 
@@ -224,17 +208,23 @@ function Robot(x0, y0, z0) {
     this.OMEGA = 0;
 
     this.currentState = 0;
+
+    // var B = new BezierCurve([ -1, 0, 1 ]);
+    // console.log("B(0.0) =", B.evaluate(0.0) );
+    // console.log("B(0.5) =", B.evaluate(0.5) );
+    // console.log("B(1.0) =", B.evaluate(1.0) );
 }
 
 // To execute one of these paths issue the following function call:
 //   robot.path(0).start();
 // where the argument to path selects the specific path listed below.
 Robot.prototype.path = function(p) {
-    var P = this.PATHS[p];
+    if (p === undefined) return this.pause(5);
+    var P = PATHS[p];
     var T = [];
     // Generate the necessary transition tweens
     for (var i=0; i<P.length-1; ++i) {
-        T[i] = this.getTransition(P[i], P[i+1]);
+        T[i] = makeTransition(Math.abs(P[i]), Math.abs(P[i+1]), 4000, P[i+1]<0);
     }
     // Chain together the transition tweens
     for (var i=T.length-1; i>0; --i) {
@@ -244,40 +234,86 @@ Robot.prototype.path = function(p) {
     return T[0];
 }
 
-Robot.prototype.PATHS = [
-    [ 0, 1, 2, 3 ],
-    [ 3, 2, 1, 0 ]
-];
-    
+Robot.prototype.move = function( from, to, dt, rev ) {
+    return makeTransition( from, to, dt, rev );
+}
+
+Robot.prototype.lowerBed = function() {
+    return this.lifter.lowerBed();
+}
+
+Robot.prototype.raiseBed = function() {
+    return this.lifter.raiseBed();
+}
+
 Robot.prototype.dropCart = function() {
-    if (!robot.cart.isAttached) return;
-    console.log('Dropping Cart');
-    robot.cart.applyMatrix( robot.lifter.obj.matrixWorld );
-    robot.cart.setLinearFactor(xyzVec);
-    robot.cart.setAngularFactor(xyzVec);
-    robot.lifter.obj.remove( robot.cart );
-    scene.add( robot.cart );
-    robot.cart.isAttached = false;
-    robot.cart.__dirtyPosition = true;
-    robot.cart.__dirtyRotation = true;
+    return this.lifter.dropCart();
 }
 
 Robot.prototype.grabCart = function() {
-    if (robot.cart.isAttached) return;
-    console.log("Grabbing cart.");
-    var tmp = new THREE.Matrix4();
-    tmp.getInverse( robot.lifter.obj.matrixWorld );
-    robot.cart.applyMatrix( tmp );
-    scene.remove( robot.cart );
-    robot.lifter.obj.add( robot.cart );
-    robot.cart.isAttached = true;
-    robot.cart.__dirtyPosition = true;
-    robot.cart.__dirtyRotation = true;
+    return this.lifter.grabCart();
 }
+
+Robot.prototype.turn = function( phi, dphi ) {
+    var dt = 2000*Math.abs(dphi)/Math.PI;
+    var tween = new TWEEN.Tween( this.object.rotation )
+        .to( { z: phi }, dt );
+    return tween;
+}
+
+Robot.prototype.transferCoal = function(dt) {
+    var cart = mineCarts[this.lifter.cartIndex];
+    var coal = coalChute[0].userData.pieces;
+    var tween = new TWEEN.Tween( { } )
+        .to( { }, dt || 4000 )
+        .onUpdate( function(cart, coal) {
+            return function(t) {
+                var index = Math.floor(23*t);
+                coalChute[0].remove(coal[index]);
+                var dx = 3;
+                var dy = 10;
+                var dz = 2;
+                var x = dx*Math.random() - dx/2;
+                var y = dy*Math.random() - dy/2;
+                var z = dz*Math.random() + 2;
+                coal[index].position.x = x;
+                coal[index].position.y = y;
+                coal[index].position.z = z;
+                cart.add(coal[index]);
+            }
+        }(cart, coal) );
+    return tween;
+}
+
+// Transfer cart to scoring bin
+Robot.prototype.scoreCoal = function() {
+    return this.pause(500);
+}
+
+Robot.prototype.reset = function(dt) {
+    return new TWEEN.Tween({})
+        .to({}, dt)
+        .onComplete(function() {
+            console.log("Attempting to refresh page.");
+            location.reload();
+        } );
+}
+
+// The pause tween can also be used as a place holder that does
+// nothing, when there is nothing to be done.
+Robot.prototype.pause = function( duration ) {
+    var dt = duration || 1000;
+    var begin = {};
+    var end = {};
+    var tween = new TWEEN.Tween( begin ).to( end, dt );
+    return tween;
+}
+
+
 
 //--------------------------------------------------------------------
 // Accelerate the robot wheel speeds
-Robot.prototype.accel = function(alphaL, alpha) {
+Robot.prototype.accel = function(alphaL, alphaR) {
     var r = 3;              // wheel radius
     var d = 10;             // wheel separation
     this.omegaL += alphaL;  // angular velocity of left wheel
@@ -324,49 +360,20 @@ Robot.prototype.updateMotion = function(dt) {
     }
     this.object.__dirtyPosition = true;
     this.object.__dirtyRotation = true;
-    if (this.cart.isAttached) {
-        this.cart.__dirtyPosition = true;
-        this.cart.__dirtyRotation = true;
+    if (this.cartIndex >= 0) {
+        mineCarts[this.cartIndex].__dirtyPosition = true;
+        mineCarts[this.cartIndex].__dirtyRotation = true;
     }
 }
 
-//--------------------------------------------------------------------
-// Get tween for the specified transition
-Robot.prototype.getTransition = function(curr, next) {
-    console.log(Transitions[curr][next]);
-    if (!Transitions[curr][next]) {
-        console.log("Invalid transition. %s -> %s", curr, next);
-        return undefined;
-    }
-    console.log("%s -> %s", curr, next);
-    var begin = { s0: curr, s1: next };
-    var end   = { };
-    console.log("Begin: ", begin);
-    console.log("End:   ", end);
-    var tween = new TWEEN.Tween( begin )
-        .to( end, Transitions[curr][next].dt )
-        .onUpdate( function(t) {
-            var T = Transitions[this.s0][this.s1];
-            robot.object.position.x = T.x.evaluate(t);
-            robot.object.position.y = T.y.evaluate(t);
-            robot.object.rotation.z = T.z.evaluate(t);
-            robot.object.__dirtyPosition = true;
-            robot.object.__dirtyRotation = true;
-        } )
-        .onComplete( function() {
-            robot.object.__dirtyPosition = true;
-            robot.object.__dirtyRotation = true;
-            robot.currentState = next;
-        } );
-    return tween;
-}
-
-function LiftBed() {
+function Lifter() {
     this.lowerAngle =  0.125*Math.PI;
     this.raiseAngle =  0.5*Math.PI;
     this.currAngle = this.raiseAngle;
     this.raised = true;
-    
+    this.liftLock = false;
+    this.cartLock = false;
+
     var elbowGeom = new THREE.TorusGeometry(1.5, 0.625, 12, 12, Math.PI/2);
     var cylSideGeom = new THREE.CylinderGeometry( 0.5, 0.5, 10 );
     var cylBackGeom = new THREE.CylinderGeometry( 0.5, 0.5, 6 );
@@ -421,139 +428,128 @@ function LiftBed() {
         // cylB.add( this.axel[i] );
         this.obj.add( this.axel[i] );
     }
-    // this.obj.translateX( 5 );
-    // this.obj.translateZ( 0 );
     this.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
     this.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
+
+    this.cartNode = new THREE.Object3D();
+    this.cartNode.translateX( 7.5 );
+    this.cartNode.translateZ( -2 );
+    this.cartNode.rotateOnAxis( zAxis, Math.PI/2 );
+
+    var cart = makeCopperCart(WOODMat);
+    cart.position.copy( this.cartNode.position );
+    cart.rotation.copy( this.cartNode.rotation );
+    if (usePhysics) {
+        cart.setLinearFactor(nullVec);
+        cart.setAngularFactor(nullVec);
+    }
+    this.obj.add(cart);
+    this.cartIndex = mineCarts.length;
+    mineCarts.push(cart);
 }
 
-LiftBed.prototype.raiseBed = function() {
-    if (this.raised) return;
-    console.log("Raising the bed.");
-    this.liftTween().start();
+Lifter.prototype.raiseBed = function() {
+    if (this.liftLock || this.raised) return robot.pause(5);
+    return this.liftTween();
 }
 
-LiftBed.prototype.lowerBed = function() {
-    if (!this.raised) return;
-    console.log("Lowering the bed.");
-    this.liftTween().start();
+Lifter.prototype.lowerBed = function() {
+    if (this.liftLock || !this.raised) return robot.pause(5);
+    return this.liftTween();
 }
 
-LiftBed.prototype.liftTween = function () {
+Lifter.prototype.liftTween = function () {
+    if (this.liftLock) return robot.pause(5);
+    this.liftLock = true;
+    console.log("%s the bed.", (this.raised ? "Lowering" : "Raising"));
     var tween = new TWEEN.Tween( this )
         .to( { currAngle: (this.raised ? this.lowerAngle : this.raiseAngle) },
              1000 )
-        .onUpdate( function() {
-            robot.lifter.obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
-            robot.lifter.obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
-            for (var i=0; i<4; ++i) {
-                robot.lifter.axel[i].rotation.y = -this.currAngle;
+        .onUpdate( function(obj, axel) {
+            return function() {
+                obj.position.x = 3.0*Math.cos(this.currAngle) + 3.5;
+                obj.position.z = 3.0*Math.sin(this.currAngle) - 1.5;
+                for (var i=0; i<4; ++i) {
+                    axel[i].rotation.y = -this.currAngle;
+                }
             }
-            if (robot.cart.isAttached) {
-                robot.cart.__dirtyPosition = true;
-                robot.cart.__dirtyRotation = true;
+        }(this.obj, this.axel) )
+        .onComplete( function(lifter) {
+            return function() {
+                lifter.raised = (this.currAngle == lifter.raiseAngle);
+                lifter.liftLock = false;
             }
-        } )
-        .onComplete( function() {
-            robot.lifter.raised = (this.currAngle == robot.lifter.raiseAngle);
-            if (robot.cart.isAttached) {
-                robot.cart.__dirtyPosition = true;
-                robot.cart.__dirtyRotation = true;
-            }
-        } );
+        }(this) );
     return tween;
 }
 
-function BezierCurve(b) {
-    this.k = b.length;
-    this.b = b;
+Lifter.prototype.dropCart = function() {
+    // Check to see if we are carrying a cart
+    if (this.cartLock || this.cartIndex < 0) return robot.pause(5);
+
+    console.log('Dropping Cart %s', this.cartIndex);
+    this.cartLock = true;
+    // If the bed is up, then lower it down
+    var t0 = new TWEEN.Tween( this.cartIndex )
+        .to( -1, 200)
+        .onComplete( function( parent, child ) {
+            return function() {
+                child.applyMatrix( parent.obj.matrixWorld );
+                parent.obj.remove( child );
+                scene.add( child );
+                parent.cartIndex = -1;
+                parent.cartLock = false;
+            }
+        }(this, mineCarts[this.cartIndex]) );
+    return t0;
 }
 
-BezierCurve.prototype.evaluate = function(t) {
-    var b = [];
-    for (var p=0; p<this.k; ++p) {
-        b[p] = this.b[p];
-    }
-    for (var m=this.k-1; m>=0; --m) {
-        for (var p=0; p<m; ++p) {
-            b[p] = (1-t)*b[p] + t*b[p+1];
+Lifter.prototype.grabCart = function() {
+/*
+    // If any of the carts are already attached, then we can't pick up
+    // any more now can we?
+    if (this.cartLock || this.cartIndex >= 0) return robot.pause(5);
+
+    // Find the closest cart
+    var distSq = 1e12, index = -1;
+    for (var i=0; i<mineCarts.length; ++i) {
+        var world = mineCarts[i].position.clone();
+        var local = this.obj.worldToLocal(world);
+        var dSq = local.lengthSq();
+        if (dSq < distSq) {
+            distSq = dSq;
+            index = i;
         }
     }
-    return b[0];
-};
+    // Look to see if we are close enough to the cart to pick it up.
+    if (distSq > 100) {
+        console.log("No carts are in range of the lifter.");
+        return robot.pause(5);
+    }
+*/
+    var index = 0;
+    console.log("Grabbing cart %s.", index);
+    this.cartLock = true;
+    // Pick up the closest cart
+    var t0 = new TWEEN.Tween( this.cartIndex )
+        .to( index, 200)
+        .onComplete( function( parent, child, index ) {
+            return function() {
+                console.log(parent);
+                console.log(child);
+                console.log(index);
+                var Minv = new THREE.Matrix4();
+                Minv.getInverse( parent.obj.matrixWorld );
+                // Center it on the robot
+                child.position.copy(parent.cartNode.position);
+                child.rotation.copy(parent.cartNode.rotation);
+                child.applyMatrix( Minv );
+                scene.remove( child );
+                parent.obj.add( child );
+                parent.cartIndex = index;
+                parent.cartLock = false;
+            }
+        }(this, mineCarts[index], index) );
 
-var States = [
-    { // State 0 - Start box, facing east
-        x: -135, y:  -60, theta:  0
-    },
-    { // State 1 - Ground Level (center), facing south
-        x: -110, y:  -85, theta: -Math.PI/2
-    },
-    { // State 2 - Gate 1, facing east
-        x:  -77, y: -125, theta:  0
-    },
-    { // State 3 - Coal chute, facing north
-        x:  -50, y:  -105, theta:  Math.PI/2
-    },
-];
-
-//--------------------------------------------------------------------
-// TRANSITIONS
-var Transitions = [];
-//------------------------------------------------
-// From State 0
-Transitions[0] = []
-// To State 1
-Transitions[0][1] = {
-    x: new BezierCurve([States[0].x, States[1].x, States[1].x]),
-    y: new BezierCurve([States[0].y, States[0].y, States[1].y]),
-    z: new BezierCurve([States[0].theta, States[1].theta]),
-    dt: 4000
-};
-//------------------------------------------------
-// From State 1
-Transitions[1] = []
-// To State 2
-Transitions[1][2] = {
-    x: new BezierCurve([States[1].x, States[1].x, States[2].x]),
-    y: new BezierCurve([States[1].y, States[2].y, States[2].y]),
-    z: new BezierCurve([States[1].theta, States[2].theta]),
-    dt: 4000
-};
-// To State 0
-Transitions[1][0] = {
-    x: new BezierCurve([States[1].x, States[1].x, States[0].x]),
-    y: new BezierCurve([States[1].y, States[0].y, States[0].y]),
-    z: new BezierCurve([States[1].theta, States[0].theta]),
-    dt: 4000
-};
-
-//------------------------------------------------
-// From State 2
-Transitions[2] = []
-// To State 3
-Transitions[2][3] = {
-    x: new BezierCurve([States[2].x, States[3].x, States[3].x]),
-    y: new BezierCurve([States[2].y, States[2].y, States[3].y]),
-    z: new BezierCurve([States[2].theta, States[3].theta]),
-    dt: 4000
-};
-// To State 1
-Transitions[2][1] = {
-    x: new BezierCurve([States[2].x, States[1].x, States[1].x]),
-    y: new BezierCurve([States[2].y, States[2].y, States[1].y]),
-    z: new BezierCurve([States[2].theta, States[1].theta]),
-    dt: 4000
-};
-
-//------------------------------------------------
-// From State 3
-Transitions[3] = []
-// To State 2
-Transitions[3][2] = {
-    x: new BezierCurve([States[3].x, States[3].x, States[2].x]),
-    y: new BezierCurve([States[3].y, States[2].y, States[2].y]),
-    z: new BezierCurve([States[3].theta, States[2].theta]),
-    dt: 4000
-};
-
+    return t0;
+}

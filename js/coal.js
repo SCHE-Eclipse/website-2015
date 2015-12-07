@@ -8,8 +8,8 @@ function Coal(enablePhysics, enableShadows) {
                      enableShadows && useShadows );
     if (this.physics) {
         this.mesh = new Physijs.BoxMesh( this.geometry,
-                                            this.substance,
-                                            this.mass );
+                                         this.substance,
+                                         this.mass );
     }
     else {
         this.mesh = new THREE.Mesh( this.geometry,
@@ -18,6 +18,7 @@ function Coal(enablePhysics, enableShadows) {
     this.mesh.castShadow = this.shadows;
     // Coal is already black, so don't bother receiving shadows
     //this.mesh.receiveShadow = this.shadows;
+    this.velocity = nullVec.clone();
 }
 //--------------------------------------------------------------------
 // The prototype holds shared properties
@@ -29,11 +30,30 @@ Coal.prototype.geometry = makeCoalGeometry();
 Coal.prototype.material = new THREE.MeshLambertMaterial(
     { color: 0x222222 }
 );
-Coal.prototype.substance = Physijs.createMaterial(
-    Coal.prototype.material,
-    Coal.prototype.friction,
-    Coal.prototype.restitution
-);
+if (usePhysics) {
+    Coal.prototype.substance = Physijs.createMaterial(
+        Coal.prototype.material,
+        Coal.prototype.friction,
+        Coal.prototype.restitution
+    );
+}
+Coal.prototype.drop = function() {
+    var x = this.mesh.position.x;
+    var y = this.mesh.position.y;
+    var z = this.mesh.position.z;
+    var vx = Math.random();
+    var vy = Math.random();
+    var vz = 0;
+    var t = Math.sqrt(2*z/385.8);
+    var xyTween = new TWEEN.Tween(this.position)
+        .to( { x: vx*t, y: vy*t }, t );
+    var zTween = new TWEEN.Tween(this.position)
+        .to( { z: 0 } )
+        .easing(Easing.Quadratic.In);
+    xyTween.start();
+    zTween.start();
+}
+
 //--------------------------------------------------------------------
 function makeCoalGeometry() {
     var geom = new THREE.Geometry();

@@ -1,7 +1,9 @@
 //if (!Detector.webgl) Detector.addGetWebGLMessage();
 
-var usePhysics = true;
+var usePhysics = false;
 var useShadows = false;
+var useLambert = true;
+var useTankControls = false;
 
 if (usePhysics) {
     Physijs.scripts.worker = 'js/libs/physijs_worker.js';
@@ -19,8 +21,11 @@ var spodumenePieces = [], chalcopyritePieces = [], limestonePieces = [];
 var coalChute = [], coalTower = [], coalSupport = [];
 var scoringBins = [], sparePartsRack = [];
 var chuteConstraint = [], supportConstraint = [];
+var mineCarts = [];
 var magnetiteVein = [];
 var spodumeneTower;
+
+var TestScripts = [];
 
 var nullVec = new THREE.Vector3( 0, 0, 0 );
 var xyVec = new THREE.Vector3( 1, 1, 0 );
@@ -32,6 +37,7 @@ var zAxis = new THREE.Vector3( 0, 0, 1 );
 // Various materials used in the play field.
 //var woodTex = new THREE.ImageUtils.loadTexture( 'wood1.jpg' );
 //var woodMat = new THREE.MeshLambertMaterial( { map: woodTex } );
+if (useLambert) {
 var WOODMat = new THREE.MeshLambertMaterial( { color: 0x0066cc } );
 var woodMat = new THREE.MeshLambertMaterial( { color: 0xd2b48c } );
 var coalMat = new THREE.MeshLambertMaterial( { color: 0x222222 } );
@@ -48,7 +54,25 @@ var blueMat   = new THREE.MeshLambertMaterial( { color: "blue" } );
 var yellowMat = new THREE.MeshLambertMaterial( { color: "yellow" } );
 var greenMat  = new THREE.MeshLambertMaterial( { color: "green" } );
 var colorMats = [ redMat, blueMat, yellowMat, greenMat ];
-
+}
+else {
+var WOODMat = new THREE.MeshBasicMaterial( { color: 0x0066cc } );
+var woodMat = new THREE.MeshBasicMaterial( { color: 0xd2b48c } );
+var coalMat = new THREE.MeshBasicMaterial( { color: 0x222222 } );
+var clearMat = new THREE.MeshBasicMaterial( { visible: false } );
+var PVCMat = new THREE.MeshBasicMaterial( { color: 0xff8800,
+                                              side: THREE.DoubleSide } );
+var pvcMat = new THREE.MeshBasicMaterial( { color: 0xffffff,
+                                              side: THREE.DoubleSide } );
+var floorMat  = new THREE.MeshBasicMaterial( { color: 0x444444 } );
+var grayMat   = new THREE.MeshBasicMaterial( { color: "gray" } );
+var whiteMat = new THREE.MeshBasicMaterial( { color: "white" } );
+var redMat    = new THREE.MeshBasicMaterial( { color: "red" } );
+var blueMat   = new THREE.MeshBasicMaterial( { color: "blue" } );
+var yellowMat = new THREE.MeshBasicMaterial( { color: "yellow" } );
+var greenMat  = new THREE.MeshBasicMaterial( { color: "green" } );
+var colorMats = [ redMat, blueMat, yellowMat, greenMat ];
+}
 // Initialize THREE.js, PHYSI.js and all game elements
 function init() {
     var div = document.createElement("div");
@@ -56,11 +80,10 @@ function init() {
     document.body.appendChild(div);
 
     var aspect = window.innerWidth / window.innerHeight;
-    camera = new THREE.PerspectiveCamera( 45, aspect, 0.1, 10000 );
+    camera = new THREE.PerspectiveCamera( 60, aspect, 0.1, 10000 );
+    camera.position.set(-150, -200, 80);
     // camera.position.set(-180, -100, 17);
     // camera.lookAt(new THREE.Vector3(-18.625, -104.375, 8));
-    camera.position.set(-180, -140, 37);
-    camera.lookAt(new THREE.Vector3(-77, -125, 12));
     camera.up.set( 0, 0, 1 );
     camera.updateProjectionMatrix();
 
@@ -78,7 +101,8 @@ function init() {
         div.appendChild(physics_stats.domElement);
 
         scene = new Physijs.Scene({ reportsize: 500, fixedTimeStep: 1/60 });
-        scene.setGravity( new THREE.Vector3( 0, 0, -50 ) );
+        scene.setGravity( new THREE.Vector3( 0, 0, -385.8 ) );
+        console.log(scene.gravity);
         scene.addEventListener(
             'update',
             function() {
@@ -103,7 +127,7 @@ function init() {
     initScene();
     
     var x = -135;
-    var y = -60.75;
+    var y = -60;
     var z = 3;
     robot = new Robot();
     robot.object.translateX( x );
@@ -111,16 +135,8 @@ function init() {
     robot.object.translateZ( z );
     scene.add( robot.object );
 
-    // robot.cart = makeCopperCart(WOODMat);
-    // robot.cart.translateX( x + 10.5 );
-    // robot.cart.translateY( y );
-    // robot.cart.translateZ( z - 2 );
-    // robot.cart.rotateOnAxis(zAxis, Math.PI/2);
-    // robot.cart.setLinearFactor(nullVec);
-    // robot.cart.setAngularFactor(nullVec);
-    // robot.cart.isAttached = true;
-    // scene.add(robot.cart);
-    
+    TestScripts.push( GenerateScript() );
+
     renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
@@ -276,64 +292,79 @@ function triggerCoalChute( section ) {
     var s = ( section ? section : activeSection );
     if (coalChute[s].userData.triggered) return;
     coalChute[s].userData.triggered = true;
+    coalSupport[s].rotateOnAxis( zAxis, Math.Pi/2 );
     scene.remove(coalSupport[s]);
-    coalChute[s].setLinearFactor(new THREE.Vector3(1,1,1));
-    coalChute[s].setAngularFactor(new THREE.Vector3(1,1,1));
+    if (usePhysics) {
+        coalChute[s].setLinearFactor(new THREE.Vector3(1,1,1));
+        coalChute[s].setAngularFactor(new THREE.Vector3(1,1,1));
+}
     for (var i=0; i<24; ++i) {
-        if (true) {
-            var piece = coalChute[s].userData.pieces.pop();
-            coalChute[s].remove(piece);
-            var pos = piece.localToWorld(new THREE.Vector3(0,0,0));
-            piece.position.set(pos.x, pos.y, pos.z);
-            piece.matrixWorldNeedsUpdate = true;
-            piece.setLinearFactor(new THREE.Vector3(1,1,1));
-            piece.setAngularFactor(new THREE.Vector3(1,1,1));
-            piece.setLinearVelocity(nullVec);
-            piece.setAngularVelocity(nullVec);
+        var piece = ( coalChute[s].userData.pieces.pop() ||
+                      coalPieces[s][i].pop() );
+        if (usePhysics) {
+            //piece.applyMatrix( coalChute[s].matrixWorld );
+            piece.setLinearFactor(xyzVec);
+            piece.setAngularFactor(xyzVec);
+            // piece.setLinearVelocity(nullVec);
+            // piece.setAngularVelocity(nullVec);
             piece.__dirtyRotation = true;
             piece.__dirtyPosition = true;
-            coalPieces[s].push(piece);
-            scene.add(piece);
         }
+        coalChute[s].remove(piece);
+        coalPieces[s].push(piece);
+        scene.add(piece);
+        // piece.drop();
     }
 }
 
 function triggerMagnetiteVein( section ) {
     console.log("triggerMagnetitieVein");
     var s = ( section ? section : activeSection );
-
+    var veinTween1 = new TWEEN.Tween( magnetiteVein[s].obj.rotation )
+        .to( { x: -10*Math.PI/180 }, 1000 );
+    var veinTween2 = new TWEEN.Tween( magnetiteVein[s].obj.rotation )
+        .to( { x: 16*Math.PI/180 }, 1000 );
     // Reparent the magnetite pieces to the scene.
-    if (magnetiteVein[s].userData.pieces.length > 0) {
-        var piece = magnetiteVein[s].userData.pieces.pop();
-        magnetitePieces[section].push(piece);
+    if (magnetiteVein[s].pieces.length > 0) {
+        var piece = magnetiteVein[s].pieces.pop();
+        magnetitePieces[s].push(piece);
         var tween = new TWEEN.Tween( piece.position );
         var y = piece.position.y;
         var t = 100*(18-y);
         var onUpdate = function(piece) {
             return function() {
-                piece.__dirtyPosition = true;
+                if (usePhysics) {
+                    piece.__dirtyPosition = true;
+                }
             }
         }
         var onComplete = function(parent, piece) {
             return function() {
-                var pos = parent.localToWorld(piece.position);
-                var vel = pos.clone().sub(parent.position).normalize();
+                piece.applyMatrix( parent.matrixWorld );
                 parent.remove(piece);
-                piece.setLinearFactor(new THREE.Vector3(1,1,1));
-                piece.setAngularFactor(new THREE.Vector3(1,1,1));
-                piece.position = pos;
-                piece.setLinearVelocity(vel);
-                piece.setAngularVelocity(new THREE.Vector3(0,0,0));
+                var vel = piece.position.clone().sub(parent.position).normalize();
+                if (usePhysics) {
+                    piece.setLinearFactor(new THREE.Vector3(1,1,1));
+                    piece.setAngularFactor(new THREE.Vector3(1,1,1));
+                    piece.setLinearVelocity(vel);
+                    piece.setAngularVelocity(new THREE.Vector3(0,0,0));
+                    piece.__dirtyRotation = true;
+                    piece.__dirtyPosition = true;
+                }
+                else {
+                    var tween = new TWEEN.Tween();
+                }
                 scene.add(piece);
-                piece.__dirtyRotation = true;
-                piece.__dirtyPosition = true;
             }
         }
         tween.to( { y: 18 }, t );
         tween.onUpdate( onUpdate(piece) );
-        tween.onComplete( onComplete(magnetiteVein[s], piece) );
-        tween.start();
+        tween.onComplete( onComplete(magnetiteVein[s].tubeBody, piece) );
+        //tween.start();
     }
+    veinTween2.delay( 4000 );
+    veinTween1.chain( veinTween2 );
+    veinTween1.start();
 }
 
 function triggerSpodumene( ) {
@@ -348,26 +379,36 @@ var input = {
 var axis = 1;
 
 function onKeydown(e) {
-	  switch(e.keyCode){
+	  switch(e.keyCode) {
+    case 32: // space
+        break;
+    case 48: // 0
+        TestScripts[0].start();
+        break;
     case 49: // 1
     case 50: // 2
     case 51: // 3
     case 52: // 4
-        console.log(e.keyCode, e.keyCode-49);
         robot.path(e.keyCode-49).start();
         break;
     case 81: // q
-        robot.dropCart();
+        robot.lifter.dropCart().start();
         break;
     case 69: // e
-        robot.grabCart();
+        robot.lifter.grabCart().start();
         break;
     case 82: // r
-        robot.lifter.raiseBed();
+        robot.lifter.raiseBed().start();
         break;
     case 70: // f
-        robot.lifter.lowerBed();
+        robot.lifter.lowerBed().start();
         break;
+	  case 67: // c
+	      triggerCoalChute( activeSection );
+	      break;
+	  case 77: // m
+	      triggerMagnetiteVein( activeSection );
+	      break;
 	  case 87: // w
         robot.setSpeed( 2,  2);
 	      break;
@@ -379,12 +420,6 @@ function onKeydown(e) {
 	      break;
 	  case 68: // d
         robot.setSpeed( 1, -1);
-	      break;
-	  case 67: // c
-	      triggerCoalChute( activeSection );
-	      break;
-	  case 77: // m
-	      triggerMagnetiteVein( activeSection );
 	      break;
 	  case 97: // Numpad 1
         robot.accel(-1,  0);
@@ -435,7 +470,7 @@ function onKeyup(e) {
 	  case 103:// Numpad 7
 	  case 104:// Numpad 8
 	  case 105:// Numpad 9
-        //robot.setSpeed( 0,  0);
+        robot.setSpeed( 0,  0);
 	      break;
 	  }
 }
@@ -473,19 +508,28 @@ function updateJoystick() {
     var DW = gamepad.buttons[14];
     var DE = gamepad.buttons[15];
 
-    if ( (RX*RX + RY*RY) > 0.2 ) {
-        robot.setSpeed(2*RY-RX, 2*RY+RX);
+    if ( useTankControls ) {
+        if ( (LY*LY + RY*RY) > 0.2 ) {
+            robot.setSpeed(-2*LY, 2*RY);
+        }
+        else {
+            robot.setSpeed(0,0);
+        }
     }
     else {
-        robot.setSpeed(0,0);
+        if ( (RX*RX + RY*RY) > 0.2 ) {
+            robot.setSpeed(2*RY-RX, 2*RY+RX);
+        }
+        else {
+            robot.setSpeed(0,0);
+        }
     }
 
-    if (A) {
-        robot.lifter.lowerBed();
-    }
-    if (B) {
-        robot.lifter.raiseBed();
-    }
+    if (A) robot.lifter.lowerBed().start();
+    if (B) robot.lifter.raiseBed().start();
+    
+    if (X) robot.lifter.dropCart().start();
+    if (Y) robot.lifter.grabCart().start();
 /*
     // Right stick drives the robot
     var pL = maxPower;

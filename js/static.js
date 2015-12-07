@@ -320,7 +320,7 @@ function makeGate( innerWidth, innerHeight, mat ) {
     var horizontalGeom = new THREE.BoxGeometry( 3.5, innerWidth + 1.5, 0.75 );
     var verticalGeom = new THREE.BoxGeometry( 3.5, 0.75, innerHeight )
     
-    var bot = new THREE.Mesh( horizontalGeom, mat, 0 );
+    var bot = makeBoxMesh( horizontalGeom, mat, 0 );
     var top = makeBoxMesh( horizontalGeom, mat, 0 );
     var left = makeBoxMesh( verticalGeom, mat, 0 );
     var right = makeBoxMesh( verticalGeom, mat, 0 );

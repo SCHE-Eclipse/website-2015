@@ -40,6 +40,7 @@ function addDynamicObjects() {
         coalChute[i].translateX(-70.75 );
         coalChute[i].translateY(-93.5125 );
         coalChute[i].translateZ( 31 );
+        coalChute[i].rotateOnAxis( yAxis, 15*Math.PI/180 );
         coalChute[i].userData.triggered = false;
         scene.add( coalChute[i] );
 
@@ -65,6 +66,10 @@ function addDynamicObjects() {
         coalSupport[i].translateX( -72.75 );
         coalSupport[i].translateY( -85.2625 );
         coalSupport[i].translateZ( 18 );
+        if (usePhysics) {
+            coalSupport[i].setLinearFactor( nullVec );
+            coalSupport[i].setAngularFactor( nullVec );
+        }
         scene.add( coalSupport[i] );
         
         if (usePhysics) {
@@ -90,16 +95,17 @@ function addDynamicObjects() {
         // scene.add(cart);
         
         // Magnetite vein
-        magnetiteVein[i] = makeMagnetiteVein(colorMats[i]);
-        magnetiteVein[i].rotateOnAxis( zAxis, phi );
-        magnetiteVein[i].translateX( -18.625 );
-        magnetiteVein[i].translateY( -113.375 );
-        magnetiteVein[i].translateZ( 9.25 );
+        magnetiteVein[i] = new MagnetiteVein(colorMats[i]);
+        magnetiteVein[i].obj.rotateOnAxis( zAxis, phi );
+        magnetiteVein[i].obj.translateX( -18.625 );
+        magnetiteVein[i].obj.translateY( -104.375 );
+        magnetiteVein[i].obj.translateZ( 8.25 );
+        magnetiteVein[i].obj.rotateOnAxis( xAxis, 16*Math.PI/180 );
         
         // Magnetite pieces
         addMagnetitePieces(i);
 
-        scene.add( magnetiteVein[i] );
+        scene.add( magnetiteVein[i].obj );
 
         if (usePhysics) {
             var x = -18.625;
@@ -110,7 +116,7 @@ function addDynamicObjects() {
             var origin = new THREE.Vector3(r*Math.cos(theta),
                                            r*Math.sin(theta), z);
             var constraint = new Physijs.HingeConstraint(
-                magnetiteVein[i], undefined, origin, xAxis );
+                magnetiteVein[i].obj, undefined, origin, xAxis );
             scene.addConstraint( constraint );
         }
 
@@ -119,20 +125,31 @@ function addDynamicObjects() {
         //--------------------
         
 	      //Copper Box
-	      var mineCart = makeCopperCart(colorMats[i]);
-        mineCart.rotateOnAxis( zAxis, phi );
-        mineCart.translateX( -0.375 );
-        mineCart.translateY( -117.125 );
-	      scene.add( mineCart )
+	      var cart = makeCopperCart(colorMats[i]);
+        mineCarts.push( cart );
+        cart.isAttached = false;
+        cart.rotateOnAxis( zAxis, phi );
+        cart.translateX( -0.375 );
+        cart.translateY( -117.125 );
+	      scene.add( cart );
 
         for (var m=0; m<3; ++m) {
             for (var n=0; n<4; ++n) {
                 var chalcopyrite = makeChalcopyrite();
                 chalcopyrite.rotateOnAxis( zAxis, phi );
-                chalcopyrite.translateX( -3.5 + 3*m );
-                chalcopyrite.translateY( -121 + 3*n );
-                chalcopyrite.translateZ( 10 );
-                scene.add( chalcopyrite );
+                var dx = (i%2 ? 10 :  3);
+                var dy = (i%2 ?  3 : 10);
+                var dz = 2;
+                var x = dx*Math.random() - dx/2;
+                var y = dy*Math.random() - dy/2;
+                var z = dz*Math.random() + 2;
+                chalcopyrite.translateX(x);
+                chalcopyrite.translateY(y);
+                chalcopyrite.translateZ(z);
+                chalcopyrite.rotateOnAxis( xAxis, Math.random()*Math.PI);
+                chalcopyrite.rotateOnAxis( yAxis, Math.random()*Math.PI);
+                chalcopyrite.rotateOnAxis( zAxis, Math.random()*Math.PI);
+                cart.add( chalcopyrite );
             }
 	      }
 
@@ -142,7 +159,7 @@ function addDynamicObjects() {
             bauxite.rotateOnAxis( zAxis, phi );
             bauxite.translateX(27);
             bauxite.translateY(n*3 - 136);
-            bauxite.translateZ(2.5);
+            bauxite.translateZ(2.25);
             scene.add( bauxite );
         }
         for (var n=0; n<6; ++n) {
@@ -176,7 +193,7 @@ function addDynamicObjects() {
 function addLimestonePieces(section) {
     var limeGeom = new THREE.CylinderGeometry( 2.5, 2.5, 4.5, 16 );
 	  for (var n=0; n<5; n++) {
-	      var limeMesh = makeCylinderMesh(limeGeom, grayMat, 5);
+	      var limeMesh = makeCylinderMesh(limeGeom, grayMat, 0.5);
         limeMesh.castShadow = useShadows;
         limeMesh.receiveShadow = useShadows;
         limeMesh.rotateOnAxis( zAxis, section*Math.PI/2 );
@@ -203,7 +220,7 @@ function addCoalPieces(section) {
         for (var k=0; k<3; ++k) {
             var obj = new Coal( section == 0 );
             var mesh = obj.mesh;
-            if (section == 0) {
+            if (usePhysics && section == 0) {
                 // Positioning relative to game field
                 mesh.rotateOnAxis( zAxis, phi );
                 mesh.translateZ( 32.5 );
@@ -240,38 +257,42 @@ function addCoalPieces(section) {
     }
 }
 
-function makeMagnetiteVein(mat) {
+function MagnetiteVein(mat) {
     var tubeCapGeom = new THREE.CylinderGeometry(1.5, 1.5, 2.5, 12, 1);
     var tubeBodyGeom = new THREE.CylinderGeometry(1, 1, 36, 12, 1, true);
     var anchorGeom = new THREE.BoxGeometry( 5, 5, 0.5 );
 
-    var tubeCap  = makeCylinderMesh(tubeCapGeom, pvcMat, 10, 0.5, 0.1);
-    var tubeBody = makeCylinderMesh(tubeBodyGeom, pvcMat, 50, 0.5, 0.1);
-    var anchor   = makeBoxMesh(anchorGeom, mat, 20, 0.5, 0.1);
+    this.tubeCap  = makeCylinderMesh(tubeCapGeom, pvcMat, 10, 0.5, 0.1);
+    this.tubeBody = makeCylinderMesh(tubeBodyGeom, pvcMat, 50, 0.5, 0.1);
+    this.anchor   = makeBoxMesh(anchorGeom, mat, 20, 0.5, 0.1);
 
-    anchor.castShadow = useShadows;
-    anchor.receiveShadow = useShadows;
-    anchor.translateY( 6.5 );
-    anchor.translateZ(-1.25);
+    this.anchor.castShadow = useShadows;
+    this.anchor.receiveShadow = useShadows;
+    this.anchor.translateY( -2.5 );
     
-    tubeCap.castShadow = useShadows;
-    tubeCap.receiveShadow = useShadows;
-    tubeCap.translateY(-18 );
-    //tubeCap.material.wireframe = true;
+    this.tubeCap.castShadow = useShadows;
+    this.tubeCap.receiveShadow = useShadows;
+    this.tubeCap.translateY(-18 );
+    //this.tubeCap.material.wireframe = true;
     
-    tubeBody.castShadow = useShadows;
-    tubeBody.receiveShadow = useShadows;
-    //tubeBody.material.wireframe = true;
+    this.tubeBody.castShadow = useShadows;
+    this.tubeBody.receiveShadow = useShadows;
+    this.tubeBody.translateY(-6.5);
+    this.tubeBody.translateZ(1.25);
+    //this.tubeBody.material.wireframe = true;
     
-    tubeBody.add(tubeCap);
-    tubeBody.add(anchor);
-    return tubeBody;
+    this.tubeBody.add(this.tubeCap);
+    this.anchor.add(this.tubeBody);
+    
+    this.obj = new THREE.Object3D();
+    this.obj.add( this.anchor );
+
+    this.pieces = [];
 }
 
 // Make and add the magnetite pieces (golf balls)
 function addMagnetitePieces(section) {
     magnetitePieces[section] = [];
-    magnetiteVein[section].userData.pieces = [];
     var phi = section*Math.PI/2;
     for (var i=0; i<20; ++i) {
         var sphereGeom = new THREE.SphereGeometry( 0.85, 12, 8 );
@@ -285,8 +306,8 @@ function addMagnetitePieces(section) {
                 sphere.setLinearVelocity(nullVec);
                 sphere.setAngularVelocity(nullVec);
             }
-            magnetiteVein[section].add(sphere);
-            magnetiteVein[section].userData.pieces.push(sphere);
+            magnetiteVein[section].tubeBody.add(sphere);
+            magnetiteVein[section].pieces.push(sphere);
         }
         else {
             // Position with respect to the global scene
